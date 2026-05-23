@@ -113,7 +113,10 @@ export default function Home() {
           startListening: wrapTracks(data.sections?.startListening),
           mixes: data.sections?.mixes || [],
           radios: data.sections?.radios || [],
-          charts: wrapTracks(data.sections?.charts),
+          genreSections: (data.sections?.genreSections || []).map(s => ({
+            ...s,
+            tracks: wrapTracks(s.tracks),
+          })),
         });
         setLoading(false);
       })
@@ -124,7 +127,7 @@ export default function Home() {
   const startListening = feed?.startListening || [];
   const mixes = feed?.mixes || [];
   const radios = feed?.radios || [];
-  const charts = feed?.charts || [];
+  const genreSections = feed?.genreSections || [];
 
   return (
     <div className="page-home">
@@ -160,8 +163,10 @@ export default function Home() {
         onCardClick={(item) => navigate(`/artist/${item.artistId}`)}
         keyPrefix="radio" />
 
-      <TrackSection title="Tangga Lagu Unggulan"
-        tracks={charts} loading={loading} onTrackClick={playTrack} />
+      {genreSections.map((g) => (
+        <TrackSection key={g.id} title={g.title}
+          tracks={g.tracks} loading={loading} onTrackClick={playTrack} />
+      ))}
     </div>
   );
 }
