@@ -531,6 +531,100 @@ app.get('/api/user/playlist/:id/tracks', async (req, res) => {
   res.json({ tracks, total: data.total || 0 });
 });
 
+// ── OWNER FEED (server-stored refresh_token, no client login needed) ─────────
+const OWNER_REFRESH_TOKEN = process.env.OWNER_REFRESH_TOKEN || '';
+let ownerTokenCache = { access_token: null, expires_at: 0 };
+
+async function getOwnerToken() {
+  if (!OWNER_REFRESH_TOKEN) return null;
+  const now = Date.now();
+  if (ownerTokenCache.access_token && now < ownerTokenCache.expires_at - 30_000) {
+    return ownerTokenCache.access_token;
+  }
+  const data = await refreshUserToken(OWNER_REFRESH_TOKEN);
+  if (!data?.access_token) return null;
+  ownerTokenCache = { access_token: data.access_token, expires_at: now + (data.expires_in * 1000) };
+  return data.access_token;
+}
+
+async function ownerGet(path) {
+  const tok = await getOwnerToken();
+  if (!tok) return null;
+  return userSpotifyGet(path, tok);
+}
+
+app.get('/api/feed/me', async (req, res) => {
+  const data = await ownerGet('/me');
+  if (!data) return res.status(503).json({ error: 'Owner feed unavailable' });
+  res.json({ id: data.id, name: data.display_name, avatar: data.images?.[0]?.url || null });
+});
+
+app.get('/api/feed/top-tracks', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+  const range = req.query.time_range || 'short_term';
+  const data = await ownerGet(`/me/top/tracks?limit=${limit}&time_range=${range}`);
+  res.json({ tracks: (data?.items || []).map(mapTrack).filter(Boolean) });
+});
+
+app.get('/api/feed/recently-played', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+  const data = await ownerGet(`/me/player/recently-played?limit=${limit}`);
+  const seen = new Set();
+  const tracks = [];
+  for (const item of (data?.items || [])) {
+    const t = mapTrack(item.track);
+    if (t && !seen.has(t.id)) { seen.add(t.id); tracks.push(t); }
+  }
+  res.json({ tracks });
+});
+
+app.get('/api/feed/playlists', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+  const data = await ownerGet(`/me/playlists?limit=${limit}`);
+  const playlists = (data?.items || []).filter(Boolean).map(p => ({
+    id: p.id,
+    name: p.name,
+    description: p.description || '',
+    cover: p.images?.[0]?.url || '',
+    tracks_count: p.tracks?.total || 0,
+    owner: p.owner?.display_name || '',
+  }));
+  res.json({ playlists });
+});
+
+app.get('/api/feed/recommendations', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+  const top = await ownerGet('/me/top/tracks?limit=5&time_range=short_term');
+  const seeds = (top?.items || []).slice(0, 5).map(t => t.id).join(',');
+  const params = seeds
+    ? `seed_tracks=${seeds}&limit=${limit}`
+    : `seed_genres=pop,indie,dance&limit=${limit}`;
+  const data = await ownerGet(`/recommendations?${params}`);
+  res.json({ tracks: (data?.tracks || []).map(mapTrack).filter(Boolean) });
+});
+
+app.get('/api/feed/playlist/:id', async (req, res) => {
+  const data = await ownerGet(`/playlists/${req.params.id}`);
+  if (!data) return res.status(404).json({ error: 'Playlist not found' });
+  res.json({
+    id: data.id,
+    name: data.name,
+    description: data.description || '',
+    cover: data.images?.[0]?.url || '',
+    tracks_count: data.tracks?.total || 0,
+    owner: data.owner?.display_name || '',
+  });
+});
+
+app.get('/api/feed/playlist/:id/tracks', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+  const offset = parseInt(req.query.offset) || 0;
+  const data = await ownerGet(`/playlists/${req.params.id}/tracks?limit=${limit}&offset=${offset}`);
+  if (!data) return res.json({ tracks: [], total: 0 });
+  const tracks = (data.items || []).filter(i => i?.track?.id).map(i => mapTrack(i.track)).filter(Boolean);
+  res.json({ tracks, total: data.total || tracks.length });
+});
+
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

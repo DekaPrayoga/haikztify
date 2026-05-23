@@ -1,39 +1,43 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import { getSpotifyPlaylistTracks } from '../services/spotifyApi';
-import { useAuth, API_BASE } from '../context/AuthContext';
+import { getSpotifyPlaylistTracks, API_BASE } from '../services/spotifyApi';
 import usePlayerStore from '../store/playerStore';
 
 export default function SpotifyPlaylistPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { playTrack, currentTrack, isPlaying, toggleLike, likedIds, addTrackToPlaylist, playlists, createPlaylist } = usePlayerStore();
-  const { isLoggedIn, getToken } = useAuth();
 
   const [tracks, setTracks] = useState([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [playlistMeta, setPlaylistMeta] = useState(null);
+  const [meta, setMeta] = useState(null);
   const [showAddMenu, setShowAddMenu] = useState(null);
 
   const load = useCallback(async (off) => {
     if (off === 0) setLoading(true); else setLoadingMore(true);
     try {
       let result = { tracks: [], total: 0 };
-      // Try user-auth endpoint first (unlocks all playlists)
-      if (isLoggedIn) {
-        const token = await getToken();
-        if (token) {
-          const res = await fetch(`${API_BASE}/api/user/playlist/${id}/tracks?limit=20&offset=${off}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) result = await res.json();
+      // Try owner feed first (private playlists need this)
+      try {
+        const r = await fetch(`${API_BASE}/api/feed/playlist/${id}/tracks?limit=50&offset=${off}`);
+        if (r.ok) {
+          const d = await r.json();
+          result = {
+            tracks: (d.tracks || []).map(t => ({
+              ...t,
+              id: `spotify_${t.id}`,
+              spotifyId: t.id,
+              src: t.src ? `${API_BASE}/api/proxy?url=${encodeURIComponent(t.src)}` : null,
+            })),
+            total: d.total || 0,
+          };
         }
-      }
+      } catch {}
       // Fallback to public endpoint
-      if (result.tracks.length === 0 && !isLoggedIn) {
+      if (result.tracks.length === 0) {
         result = await getSpotifyPlaylistTracks(id, 20, off);
       }
       setTracks(prev => off === 0 ? result.tracks : [...prev, ...result.tracks]);
@@ -41,11 +45,16 @@ export default function SpotifyPlaylistPage() {
       setOffset(off + result.tracks.length);
     } catch (e) { console.error(e); }
     if (off === 0) setLoading(false); else setLoadingMore(false);
-  }, [id, isLoggedIn, getToken]);
+  }, [id]);
 
   useEffect(() => {
     setTracks([]);
     setOffset(0);
+    setMeta(null);
+    fetch(`${API_BASE}/api/feed/playlist/${id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(m => { if (m) setMeta(m); })
+      .catch(() => {});
     load(0);
   }, [id]);
 
@@ -80,9 +89,9 @@ export default function SpotifyPlaylistPage() {
         </div>
         <div className="detail-info">
           <span className="detail-type">Playlist</span>
-          <h1 className="detail-name" style={{ fontSize: 36 }}>Spotify Playlist</h1>
+          <h1 className="detail-name" style={{ fontSize: 36 }}>{meta?.name || 'Spotify Playlist'}</h1>
           <p className="detail-meta" style={{ color: '#b3b3b3' }}>
-            {total > 0 ? `${total} songs` : 'Loading...'}
+            {meta ? `${meta.owner ? meta.owner + ' • ' : ''}${total || meta.tracks_count || 0} songs` : (total > 0 ? `${total} songs` : 'Loading...')}
           </p>
         </div>
       </div>

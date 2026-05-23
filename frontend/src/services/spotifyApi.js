@@ -208,3 +208,47 @@ export async function getSpotifyPlaylist(playlistId) {
     return null;
   }
 }
+
+// ── Owner feed (server uses stored refresh_token; no client login needed) ──
+async function fetchFeedTracks(path) {
+  try {
+    const res = await fetch(`${API_BASE}${path}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.tracks || []).map(mapTrack);
+  } catch { return []; }
+}
+
+export async function getFeedRecentlyPlayed(limit = 20) {
+  return fetchFeedTracks(`/api/feed/recently-played?limit=${limit}`);
+}
+
+export async function getFeedTopTracks(limit = 10, timeRange = 'short_term') {
+  return fetchFeedTracks(`/api/feed/top-tracks?limit=${limit}&time_range=${timeRange}`);
+}
+
+export async function getFeedRecommendations(limit = 20) {
+  return fetchFeedTracks(`/api/feed/recommendations?limit=${limit}`);
+}
+
+export async function getFeedPlaylists(limit = 20) {
+  try {
+    const res = await fetch(`${API_BASE}/api/feed/playlists?limit=${limit}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.playlists || []).map(p => ({
+      id: p.id,
+      title: p.name,
+      desc: p.description || `${p.tracks_count} songs`,
+      cover: p.cover,
+    }));
+  } catch { return []; }
+}
+
+export async function getFeedMe() {
+  try {
+    const res = await fetch(`${API_BASE}/api/feed/me`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
