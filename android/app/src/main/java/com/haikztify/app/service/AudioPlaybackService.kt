@@ -5,7 +5,6 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.net.Uri
 import android.os.Binder
 import android.os.IBinder
 import android.util.Log
@@ -34,13 +33,11 @@ class AudioPlaybackService : MediaSessionService() {
     private val binder = LocalBinder()
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    // Track info for notification
     private var currentTitle: String = "Haikztify"
     private var currentArtist: String = "Unknown Artist"
     private var currentArtworkUrl: String = ""
     private var currentArtworkBitmap: Bitmap? = null
 
-    // Callback to WebView
     var onTrackEnded: (() -> Unit)? = null
     var onPlayStateChanged: ((Boolean) -> Unit)? = null
 
@@ -49,61 +46,63 @@ class AudioPlaybackService : MediaSessionService() {
     }
 
     override fun onBind(intent: Intent?): IBinder? {
-        // If it's MediaSessionService binding, let parent handle it
-        val superBinder = super.onBind(intent)
-        return superBinder ?: binder
+        return super.onBind(intent) ?: binder
     }
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service created")
 
-        exoPlayer = ExoPlayer.Builder(this)
-            .setHandleAudioBecomingNoisy(true)  // Pause when headphones disconnected
-            .setWakeMode(androidx.media3.common.C.WAKE_MODE_NETWORK)  // Keep WiFi alive
+        val player = ExoPlayer.Builder(this)
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(androidx.media3.common.C.WAKE_MODE_NETWORK)
             .build()
-            .apply {
-                addListener(object : Player.Listener {
-                    override fun onPlaybackStateChanged(playbackState: Int) {
-                        when (playbackState) {
-                            Player.STATE_ENDED -> {
-                                Log.d(TAG, "Track ended, calling onTrackEnded")
-                                onTrackEnded?.invoke()
-                            }
-                            Player.STATE_READY -> {
-                                updateNotification()
-                            }
-                        }
-                    }
 
-                    override fun onIsPlayingChanged(isPlaying: Boolean) {
-                        onPlayStateChanged?.invoke(isPlaying)
-                        updateNotification()
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                when (playbackState) {
+                    Player.STATE_ENDED -> {
+                        Log.d(TAG, "Track ended")
+                        onTrackEnded?.invoke()
                     }
-                })
+                    Player.STATE_READY -> updateNotificationSafe()
+                    Player.STATE_IDLE, Player.STATE_BUFFERING -> { /* no-op */ }
+                }
             }
 
-        val sessionActivityPendingIntent = PendingIntent.getActivity(
-            this,
-            0,
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                onPlayStateChanged?.invoke(isPlaying)
+                updateNotificationSafe()
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                Log.e(TAG, "ExoPlayer error: ${error.message}")
+                // Notify JS so it can advance to next track
+                onTrackEnded?.invoke()
+            }
+        })
+
+        exoPlayer = player
+
+        val sessionActivityIntent = PendingIntent.getActivity(
+            this, 0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        mediaSession = MediaSession.Builder(this, exoPlayer!!)
-            .setSessionActivity(sessionActivityPendingIntent)
+        mediaSession = MediaSession.Builder(this, player)
+            .setSessionActivity(sessionActivityIntent)
             .build()
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
-        return mediaSession
-    }
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
-    // ========== Public API for WebView bridge ==========
+    // ── Public API ────────────────────────────────────────────────────────────
 
     fun playUrl(url: String) {
-        Log.d(TAG, "playUrl: $url")
-        exoPlayer?.let { player ->
+        val player = exoPlayer ?: return
+        Log.d(TAG, "playUrl: ${url.take(80)}")
+        try {
             val mediaItem = MediaItem.Builder()
                 .setUri(url)
                 .setMediaMetadata(
@@ -116,41 +115,42 @@ class AudioPlaybackService : MediaSessionService() {
             player.setMediaItem(mediaItem)
             player.prepare()
             player.play()
-            startForegroundNotification()
+            startForegroundNotificationSafe()
+        } catch (e: Exception) {
+            Log.e(TAG, "playUrl error: ${e.message}")
         }
     }
 
     fun setTrackMeta(title: String, artist: String, artworkUrl: String) {
-        currentTitle = title
-        currentArtist = artist
+        currentTitle = title.ifBlank { "Haikztify" }
+        currentArtist = artist.ifBlank { "Unknown Artist" }
         currentArtworkUrl = artworkUrl
-        // Load artwork async
+
         if (artworkUrl.isNotBlank()) {
             serviceScope.launch(Dispatchers.IO) {
                 try {
                     val stream = URL(artworkUrl).openStream()
-                    currentArtworkBitmap = BitmapFactory.decodeStream(stream)
+                    val bitmap = BitmapFactory.decodeStream(stream)
                     stream.close()
                     withContext(Dispatchers.Main) {
-                        updateNotification()
+                        currentArtworkBitmap = bitmap
+                        updateNotificationSafe()
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to load artwork: ${e.message}")
                 }
             }
+        } else {
+            currentArtworkBitmap = null
         }
     }
 
-    fun pausePlayback() {
-        exoPlayer?.pause()
-    }
-
-    fun resumePlayback() {
-        exoPlayer?.play()
-    }
+    fun pausePlayback() { exoPlayer?.pause() }
+    fun resumePlayback() { exoPlayer?.play() }
 
     fun seekTo(positionMs: Long) {
-        exoPlayer?.seekTo(positionMs)
+        try { exoPlayer?.seekTo(positionMs) }
+        catch (e: Exception) { Log.w(TAG, "seekTo error: ${e.message}") }
     }
 
     fun setVolume(volume: Float) {
@@ -158,35 +158,43 @@ class AudioPlaybackService : MediaSessionService() {
     }
 
     fun isPlaying(): Boolean = exoPlayer?.isPlaying == true
-
-    fun getCurrentPositionMs(): Long = exoPlayer?.currentPosition ?: 0
-
-    fun getDurationMs(): Long = exoPlayer?.duration ?: 0
+    fun getCurrentPositionMs(): Long = exoPlayer?.currentPosition ?: 0L
+    fun getDurationMs(): Long = exoPlayer?.duration.let { d -> if (d == null || d < 0) 0L else d }
 
     fun stopPlayback() {
-        exoPlayer?.stop()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        try {
+            exoPlayer?.stop()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        } catch (e: Exception) {
+            Log.w(TAG, "stopPlayback error: ${e.message}")
+        }
     }
 
-    // ========== Notification ==========
+    // ── Notification ─────────────────────────────────────────────────────────
 
-    private fun startForegroundNotification() {
-        val notification = buildNotification()
-        startForeground(NOTIFICATION_ID, notification)
+    private fun startForegroundNotificationSafe() {
+        try {
+            val notification = buildNotification()
+            startForeground(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground error: ${e.message}")
+        }
     }
 
-    private fun updateNotification() {
+    private fun updateNotificationSafe() {
         try {
             val notification = buildNotification()
             val manager = getSystemService(android.app.NotificationManager::class.java)
-            manager.notify(NOTIFICATION_ID, notification)
+            manager?.notify(NOTIFICATION_ID, notification)
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to update notification: ${e.message}")
+            Log.w(TAG, "updateNotification error: ${e.message}")
         }
     }
 
     private fun buildNotification(): Notification {
+        val session = mediaSession ?: throw IllegalStateException("MediaSession is null")
+
         val contentIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java).apply {
@@ -206,39 +214,40 @@ class AudioPlaybackService : MediaSessionService() {
             .setOngoing(isPlaying)
             .setSilent(true)
             .setStyle(
-                androidx.media3.session.MediaStyleNotificationHelper.MediaStyle(mediaSession!!)
+                androidx.media3.session.MediaStyleNotificationHelper.MediaStyle(session)
             )
 
-        // Album art
-        currentArtworkBitmap?.let {
-            builder.setLargeIcon(it)
-        }
+        currentArtworkBitmap?.let { builder.setLargeIcon(it) }
 
         return builder.build()
     }
 
-    // ========== Lifecycle ==========
-
-    override fun onDestroy() {
-        serviceScope.cancel()
-        mediaSession?.run {
-            player.release()
-            release()
-        }
-        mediaSession = null
-        exoPlayer = null
-        super.onDestroy()
-        Log.d(TAG, "Service destroyed")
-    }
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Keep playing when app is swiped away
         val player = mediaSession?.player
         if (player != null && player.playWhenReady) {
-            // Keep the service running
-            Log.d(TAG, "Task removed but still playing, keeping service alive")
+            Log.d(TAG, "Task removed but still playing — keeping service alive")
         } else {
             stopSelf()
         }
+    }
+
+    override fun onDestroy() {
+        serviceScope.cancel()
+        try {
+            mediaSession?.run {
+                player.release()
+                release()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error releasing mediaSession: ${e.message}")
+        }
+        mediaSession = null
+        exoPlayer = null
+        onTrackEnded = null
+        onPlayStateChanged = null
+        super.onDestroy()
+        Log.d(TAG, "Service destroyed")
     }
 }

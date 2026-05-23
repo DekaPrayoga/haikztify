@@ -9,6 +9,8 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -16,15 +18,15 @@ import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.webkit.*
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import com.haikztify.app.BuildConfig
 import com.haikztify.app.R
 import com.haikztify.app.service.AudioBridge
@@ -35,35 +37,35 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
-        // ===== SET YOUR URL HERE =====
-        private val WEB_URL: String = BuildConfig.WEB_URL.ifBlank {
-            "" // Will show setup screen if empty
-        }
+        private val WEB_URL: String = BuildConfig.WEB_URL.ifBlank { "" }
+        private const val MAX_RETRY_DELAY_MS = 8_000L
     }
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
     private lateinit var setupView: FrameLayout
 
+    // Offline/error overlay (inflated lazily)
+    private var errorView: View? = null
+
     private var audioService: AudioPlaybackService? = null
     private var audioBridge: AudioBridge? = null
     private var serviceBound = false
     private val mainScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    // Position update job
     private var positionUpdateJob: Job? = null
+    private var retryJob: Job? = null
+    private var retryCount = 0
 
+    // ── Service connection ──────────────────────────────────────────────────
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            val localBinder = binder as? AudioPlaybackService.LocalBinder
-            audioService = localBinder?.getService()
+            val localBinder = binder as? AudioPlaybackService.LocalBinder ?: return
+            audioService = localBinder.getService()
             serviceBound = true
             Log.d(TAG, "AudioService connected")
 
-            // Wire up callbacks
-            audioService?.onTrackEnded = {
-                audioBridge?.notifyTrackEnded()
-            }
+            audioService?.onTrackEnded = { audioBridge?.notifyTrackEnded() }
             audioService?.onPlayStateChanged = { isPlaying ->
                 audioBridge?.notifyPlayStateChanged(isPlaying)
                 if (isPlaying) startPositionUpdates() else stopPositionUpdates()
@@ -77,16 +79,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ── Notification permission launcher ───────────────────────────────────
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        Log.d(TAG, "Notification permission granted: $granted")
-    }
+    ) { granted -> Log.d(TAG, "Notification permission: $granted") }
 
+    // ── onCreate ────────────────────────────────────────────────────────────
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Fullscreen immersive
+        // Edge-to-edge
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.BLACK
         window.navigationBarColor = Color.BLACK
@@ -97,39 +99,48 @@ class MainActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         setupView = findViewById(R.id.setupView)
 
-        // Request notification permission (Android 13+)
         requestNotificationPermission()
+        startAndBindAudioService()
 
-        // Start and bind audio service
-        val serviceIntent = Intent(this, AudioPlaybackService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
-        bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+        // ── Back press (modern API — replaces deprecated onBackPressed()) ──
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    webView.canGoBack() -> webView.goBack()
+                    else -> moveTaskToBack(true) // keep music playing
+                }
+            }
+        })
 
         if (WEB_URL.isBlank()) {
             showSetupScreen()
         } else {
             setupView.visibility = View.GONE
             setupWebView()
-            webView.loadUrl(WEB_URL)
+            loadUrl()
         }
     }
 
-    private fun showSetupScreen() {
-        setupView.visibility = View.VISIBLE
-        webView.visibility = View.GONE
-        progressBar.visibility = View.GONE
-        // The setup screen layout tells the user to set the URL in build.gradle.kts
+    // ── Audio service lifecycle ─────────────────────────────────────────────
+    private fun startAndBindAudioService() {
+        val intent = Intent(this, AudioPlaybackService::class.java)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+            bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start audio service: ${e.message}")
+        }
     }
 
+    // ── WebView setup ───────────────────────────────────────────────────────
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
         webView.visibility = View.VISIBLE
 
-        // Create bridge
         audioBridge = AudioBridge(webView) { audioService }
         webView.addJavascriptInterface(audioBridge!!, "NativeAudio")
 
@@ -142,25 +153,23 @@ class MainActivity : AppCompatActivity() {
             databaseEnabled = true
             cacheMode = WebSettings.LOAD_DEFAULT
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            userAgentString = userAgentString + " HaikztifyApp/1.0"
-
-            // Performance
+            userAgentString = "$userAgentString HaikztifyApp/1.0"
+            @Suppress("DEPRECATION")
             setRenderPriority(WebSettings.RenderPriority.HIGH)
-            // Hardware acceleration set on WebView itself
         }
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-
-        // Enable remote debugging in debug builds
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 progressBar.visibility = View.VISIBLE
+                hideErrorView()
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 progressBar.visibility = View.GONE
-                // Inject the audio bridge override script
+                retryCount = 0
+                retryJob?.cancel()
                 injectAudioBridge()
             }
 
@@ -169,14 +178,14 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?
             ): Boolean {
                 val url = request?.url?.toString() ?: return false
-                // Keep navigation inside WebView for same-origin
-                if (url.startsWith(WEB_URL) || url.startsWith("javascript:")) {
-                    return false
+                if (url.startsWith(WEB_URL) || url.startsWith("javascript:")) return false
+                return try {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                    true
+                } catch (e: Exception) {
+                    Log.w(TAG, "Cannot open external URL: $url")
+                    true
                 }
-                // Open external links in browser
-                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                startActivity(intent)
-                return true
             }
 
             override fun onReceivedError(
@@ -184,59 +193,182 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?,
                 error: WebResourceError?
             ) {
-                if (request?.isForMainFrame == true) {
-                    Log.e(TAG, "WebView error: ${error?.description}")
-                    // Show retry after 3 seconds
-                    mainScope.launch {
-                        delay(3000)
-                        view?.loadUrl(WEB_URL)
-                    }
-                }
+                if (request?.isForMainFrame != true) return
+                val desc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                    error?.description?.toString() ?: "Unknown error"
+                else "Network error"
+                Log.e(TAG, "WebView main-frame error: $desc")
+                progressBar.visibility = View.GONE
+                showErrorViewAndScheduleRetry()
+            }
+
+            // API < 23 fallback
+            @Suppress("OVERRIDE_DEPRECATION")
+            override fun onReceivedError(
+                view: WebView?,
+                errorCode: Int,
+                description: String?,
+                failingUrl: String?
+            ) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) return
+                Log.e(TAG, "WebView error $errorCode: $description")
+                progressBar.visibility = View.GONE
+                showErrorViewAndScheduleRetry()
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                errorResponse: HttpErrorResponse?
+            ) {
+                if (request?.isForMainFrame != true) return
+                val code = errorResponse?.statusCode ?: 0
+                Log.w(TAG, "HTTP error $code on main frame")
+                if (code >= 500) showErrorViewAndScheduleRetry()
+            }
+
+            override fun onReceivedSslError(
+                view: WebView?,
+                handler: SslErrorHandler?,
+                error: android.net.http.SslError?
+            ) {
+                // Reject SSL errors — do NOT call handler.proceed() in production
+                handler?.cancel()
+                Log.e(TAG, "SSL error: ${error?.primaryError}")
+                showErrorViewAndScheduleRetry()
             }
         }
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 progressBar.progress = newProgress
-                if (newProgress >= 100) {
-                    progressBar.visibility = View.GONE
-                }
+                if (newProgress >= 100) progressBar.visibility = View.GONE
             }
 
             override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                Log.d("WebView", "${consoleMessage?.message()} [${consoleMessage?.lineNumber()}]")
+                if (BuildConfig.DEBUG) {
+                    Log.d("WebView", "${consoleMessage?.message()} [${consoleMessage?.lineNumber()}]")
+                }
                 return true
             }
+
+            // Allow file chooser (needed for file upload inside WebView)
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<android.net.Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean = false // handled by default; return false = use system chooser
         }
 
-        // Keep screen on while playing (optional)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
-    /**
-     * Inject JavaScript that intercepts HTML5 Audio and routes it through NativeAudio.
-     * This is the key magic — the website's playerStore uses `new Audio()` and `.play()`,
-     * and we transparently redirect those calls to ExoPlayer via the bridge.
-     */
+    // ── Load URL with network check ─────────────────────────────────────────
+    private fun loadUrl() {
+        if (!isNetworkAvailable()) {
+            showErrorViewAndScheduleRetry()
+            return
+        }
+        webView.loadUrl(WEB_URL)
+    }
+
+    private fun isNetworkAvailable(): Boolean {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } else {
+            @Suppress("DEPRECATION")
+            cm.activeNetworkInfo?.isConnected == true
+        }
+    }
+
+    // ── Error view & retry ──────────────────────────────────────────────────
+    private fun showErrorViewAndScheduleRetry() {
+        showErrorView()
+        retryJob?.cancel()
+        retryCount++
+        // Exponential back-off capped at MAX_RETRY_DELAY_MS
+        val delay = minOf(1_500L * (1 shl (retryCount - 1).coerceAtMost(3)), MAX_RETRY_DELAY_MS)
+        Log.d(TAG, "Scheduling retry #$retryCount in ${delay}ms")
+        retryJob = mainScope.launch {
+            delay(delay)
+            if (isNetworkAvailable()) {
+                hideErrorView()
+                loadUrl()
+            } else {
+                showErrorViewAndScheduleRetry()
+            }
+        }
+    }
+
+    private fun showErrorView() {
+        setupView.visibility = View.VISIBLE
+
+        val msg = if (isNetworkAvailable())
+            "Gagal memuat halaman.\nCek koneksi internetmu."
+        else
+            "Tidak ada koneksi internet.\nPastikan WiFi atau data aktif."
+
+        try {
+            setupView.findViewById<TextView>(R.id.setupText)?.text = msg
+        } catch (_: Exception) {}
+
+        val retryAction = {
+            retryJob?.cancel()
+            retryCount = 0
+            hideErrorView()
+            loadUrl()
+        }
+
+        // Tap anywhere on overlay = retry
+        setupView.setOnClickListener { retryAction() }
+
+        // Tap the Retry button specifically
+        try {
+            setupView.findViewById<TextView>(R.id.retryButton)?.setOnClickListener { retryAction() }
+        } catch (_: Exception) {}
+    }
+
+    private fun hideErrorView() {
+        setupView.visibility = View.GONE
+        setupView.setOnClickListener(null)
+        try {
+            setupView.findViewById<TextView>(R.id.retryButton)?.setOnClickListener(null)
+        } catch (_: Exception) {}
+    }
+
+    // ── Setup screen (blank WEB_URL) ────────────────────────────────────────
+    private fun showSetupScreen() {
+        setupView.visibility = View.VISIBLE
+        webView.visibility = View.GONE
+        progressBar.visibility = View.GONE
+    }
+
+    // ── JS Audio Bridge injection ────────────────────────────────────────────
     private fun injectAudioBridge() {
-        val js = """
+        val js = buildAudioBridgeJs()
+        try {
+            webView.evaluateJavascript(js, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to inject audio bridge: ${e.message}")
+        }
+    }
+
+    private fun buildAudioBridgeJs(): String = """
         (function() {
             if (window.__haikztifyBridgeInjected) return;
             window.__haikztifyBridgeInjected = true;
-
             console.log('[Haikztify] Injecting native audio bridge...');
 
-            // Store reference to real Audio for non-music sounds if needed
-            const RealAudio = window.Audio;
-
-            // Track metadata setter (called from playerStore patch)
             window.__setTrackMeta = function(title, artist, cover) {
-                if (window.NativeAudio) {
-                    window.NativeAudio.setTrackMeta(title || 'Unknown', artist || 'Unknown', cover || '');
+                if (window.NativeAudio && window.NativeAudio.setTrackMeta) {
+                    try { window.NativeAudio.setTrackMeta(title || 'Unknown', artist || 'Unknown', cover || ''); }
+                    catch(e) { console.warn('[Haikztify] setTrackMeta failed:', e); }
                 }
             };
 
-            // Fake Audio class that proxies to NativeAudio
             class FakeAudio {
                 constructor(src) {
                     this._src = src || '';
@@ -247,7 +379,6 @@ class MainActivity : AppCompatActivity() {
                     this._eventListeners = {};
                     this._readyState = 0;
 
-                    // Register for native callbacks
                     window.__onNativeTrackEnded = () => {
                         this._paused = true;
                         this._fireEvent('ended');
@@ -267,7 +398,6 @@ class MainActivity : AppCompatActivity() {
                 set src(val) {
                     this._src = val;
                     this._readyState = 0;
-                    // Don't auto-play on src set; wait for .play()
                     setTimeout(() => {
                         this._readyState = 4;
                         this._fireEvent('canplay');
@@ -278,16 +408,16 @@ class MainActivity : AppCompatActivity() {
                 get volume() { return this._volume; }
                 set volume(val) {
                     this._volume = val;
-                    if (window.NativeAudio) {
-                        window.NativeAudio.setVolume(val);
+                    if (window.NativeAudio && window.NativeAudio.setVolume) {
+                        try { window.NativeAudio.setVolume(val); } catch(e) {}
                     }
                 }
 
                 get currentTime() { return this._currentTime; }
                 set currentTime(val) {
                     this._currentTime = val;
-                    if (window.NativeAudio) {
-                        window.NativeAudio.seekTo(Math.floor(val * 1000));
+                    if (window.NativeAudio && window.NativeAudio.seekTo) {
+                        try { window.NativeAudio.seekTo(Math.floor(val * 1000)); } catch(e) {}
                     }
                 }
 
@@ -297,37 +427,36 @@ class MainActivity : AppCompatActivity() {
                 get ended() { return false; }
 
                 play() {
-                    if (window.NativeAudio && this._src) {
-                        if (this._paused && this._src) {
+                    if (!window.NativeAudio) return Promise.reject(new Error('NativeAudio not available'));
+                    try {
+                        if (this._src && this._paused) {
                             window.NativeAudio.play(this._src);
-                        } else {
-                            window.NativeAudio.resume();
+                        } else if (!this._paused || !this._src) {
+                            if (window.NativeAudio.resume) window.NativeAudio.resume();
                         }
                         this._paused = false;
                         this._fireEvent('play');
                         return Promise.resolve();
+                    } catch(e) {
+                        return Promise.reject(e);
                     }
-                    return Promise.reject('NativeAudio not available');
                 }
 
                 pause() {
-                    if (window.NativeAudio) {
-                        window.NativeAudio.pause();
+                    if (window.NativeAudio && window.NativeAudio.pause) {
+                        try { window.NativeAudio.pause(); } catch(e) {}
                     }
                     this._paused = true;
                     this._fireEvent('pause');
                 }
 
                 load() {
-                    // No-op, native handles loading
                     this._readyState = 4;
                     this._fireEvent('canplay');
                 }
 
                 addEventListener(event, callback) {
-                    if (!this._eventListeners[event]) {
-                        this._eventListeners[event] = [];
-                    }
+                    if (!this._eventListeners[event]) this._eventListeners[event] = [];
                     this._eventListeners[event].push(callback);
                 }
 
@@ -338,57 +467,48 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 _fireEvent(event) {
-                    // on-handler
                     const handler = this['on' + event];
                     if (typeof handler === 'function') {
-                        try { handler.call(this); } catch(e) { console.error(e); }
+                        try { handler.call(this); } catch(e) { console.error('[FakeAudio] on' + event, e); }
                     }
-                    // addEventListener handlers
-                    const listeners = this._eventListeners[event] || [];
-                    listeners.forEach(cb => {
-                        try { cb.call(this, { type: event, target: this }); } catch(e) { console.error(e); }
+                    (this._eventListeners[event] || []).forEach(cb => {
+                        try { cb.call(this, { type: event, target: this }); }
+                        catch(e) { console.error('[FakeAudio] listener error on ' + event, e); }
                     });
                 }
 
-                // Stubs
                 cloneNode() { return new FakeAudio(this._src); }
-                canPlayType(type) { return 'probably'; }
+                canPlayType() { return 'probably'; }
             }
 
-            // Override global Audio constructor
-            window.Audio = function(src) {
-                return new FakeAudio(src);
-            };
+            window.Audio = function(src) { return new FakeAudio(src); };
 
-            // Also patch document.createElement for <audio> elements
             const origCreateElement = document.createElement.bind(document);
             document.createElement = function(tag, options) {
-                if (tag.toLowerCase() === 'audio') {
-                    return new FakeAudio();
-                }
+                if (typeof tag === 'string' && tag.toLowerCase() === 'audio') return new FakeAudio();
                 return origCreateElement(tag, options);
             };
 
-            console.log('[Haikztify] Native audio bridge ready ✓');
+            console.log('[Haikztify] Native audio bridge ready \u2713');
         })();
-        """.trimIndent()
+    """.trimIndent()
 
-        webView.evaluateJavascript(js, null)
-    }
-
-    // ========== Position updates ==========
-
+    // ── Position polling ─────────────────────────────────────────────────────
     private fun startPositionUpdates() {
         stopPositionUpdates()
         positionUpdateJob = mainScope.launch {
             while (isActive) {
-                audioService?.let { service ->
-                    audioBridge?.notifyPositionUpdate(
-                        service.getCurrentPositionMs(),
-                        service.getDurationMs()
-                    )
+                try {
+                    audioService?.let { svc ->
+                        audioBridge?.notifyPositionUpdate(
+                            svc.getCurrentPositionMs(),
+                            svc.getDurationMs()
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Position update error: ${e.message}")
                 }
-                delay(500) // Update every 500ms
+                delay(500)
             }
         }
     }
@@ -398,52 +518,37 @@ class MainActivity : AppCompatActivity() {
         positionUpdateJob = null
     }
 
-    // ========== Permissions ==========
-
+    // ── Permissions ──────────────────────────────────────────────────────────
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
             ) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }
 
-    // ========== Lifecycle ==========
+    // ── Lifecycle ────────────────────────────────────────────────────────────
+    override fun onResume() {
+        super.onResume()
+        if (audioService?.isPlaying() == true) startPositionUpdates()
+    }
 
-    override fun onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack()
-        } else {
-            // Minimize app instead of closing (keep music playing)
-            moveTaskToBack(true)
-        }
+    override fun onPause() {
+        super.onPause()
+        // Music keeps playing via AudioPlaybackService — don't stop anything
     }
 
     override fun onDestroy() {
+        retryJob?.cancel()
         mainScope.cancel()
         stopPositionUpdates()
         if (serviceBound) {
-            unbindService(serviceConnection)
+            try { unbindService(serviceConnection) } catch (_: Exception) {}
             serviceBound = false
         }
-        webView.destroy()
+        try { webView.stopLoading(); webView.destroy() } catch (_: Exception) {}
         super.onDestroy()
-    }
-
-    // Don't stop service on pause — this is what enables background playback
-    override fun onPause() {
-        super.onPause()
-        // Music keeps playing via AudioPlaybackService
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // Resume position updates when app comes back to foreground
-        if (audioService?.isPlaying() == true) {
-            startPositionUpdates()
-        }
     }
 }
