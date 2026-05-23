@@ -7,10 +7,7 @@ import 'katex/dist/katex.min.css';
 
 const AI_BASE = 'https://api.haikz.me/ai';
 const AI_AUTH = 'haikz-ai-2026';
-// Text chat uses freemodel.dev (HAZIK_API_KEY) — no token expiry.
-// buatfoto still calls chat2api /v1/buatfoto (needs ChatGPT session for image gen).
-const FM_BASE = 'https://api.freemodel.dev/v1';
-const FM_KEY  = 'fe_oa_37174606ff6f81a82238e749bec080db461d39112d74ec7a';
+// Text chat routes through chat2api (avoids browser CORS block from freemodel.dev).
 const STORAGE_KEY = 'haikz_ai_chat_v1';
 const MAX_HISTORY = 20; // last N user+assistant messages sent to AI
 
@@ -101,14 +98,14 @@ async function generateImage(prompt) {
 
 async function streamChat({ messages, onChunk, onDone, onError }) {
   try {
-    const res = await fetch(`${FM_BASE}/chat/completions`, {
+    const res = await fetch(`${AI_BASE}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${FM_KEY}`,
+        Authorization: `Bearer ${AI_AUTH}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.5',
+        model: 'gpt-5.5-instant',
         messages,
         stream: true,
       }),

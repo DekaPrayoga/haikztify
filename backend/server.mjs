@@ -788,13 +788,32 @@ app.get('/api/feed/home', async (req, res) => {
       genreSections: sectionResults,
     },
   };
-  homeFeedCache = { data: payload, expires_at: Date.now() + 10 * 60 * 1000 };
+  homeFeedCache = { data: payload, expires_at: Date.now() + 60 * 60 * 1000 };
   res.json(payload);
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ── Token bookmarklet page ────────────────────────────────────────────────────
+app.get('/api/admin/refresh', (req, res) => {
+  const bm = `javascript:(async()=>{const s=await fetch('https://chatgpt.com/api/auth/session').then(r=>r.json());if(!s.accessToken)return alert('Login ke chatgpt.com dulu!');const r=await fetch('https://api.haikz.me/api/admin/ai-token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'haikz-ai-2026',token:s.accessToken})});const d=await r.json();alert(d.ok?'Token updated! Valid ~10 hari.':'Error: '+d.error);})();`;
+  res.send(`<!DOCTYPE html><html><head><title>HaikzTIFY Token Refresh</title>
+<meta charset="utf-8"><style>body{font:16px/1.6 sans-serif;max-width:480px;margin:60px auto;padding:0 20px;background:#111;color:#fff}
+a.bm{display:inline-block;background:#1db954;color:#000;font-weight:700;padding:12px 24px;border-radius:500px;text-decoration:none;margin:20px 0}
+code{background:#222;padding:4px 8px;border-radius:4px;font-size:13px;word-break:break-all}
+pre{background:#1a1a1a;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;word-break:break-all;white-space:pre-wrap}
+</style></head><body>
+<h2>🔑 HaikzGPT Token Refresh</h2>
+<p>Drag tombol ini ke bookmark bar-mu:</p>
+<a class="bm" href="${bm}">🔄 Refresh HaikzGPT Token</a>
+<p style="color:#b3b3b3;font-size:13px">Tiap kali token expired (biasanya ~10 hari), buka chatgpt.com → klik bookmark ini → selesai.</p>
+<hr style="border-color:#333;margin:24px 0">
+<p>Atau jalankan di browser console waktu buka chatgpt.com:</p>
+<pre>${bm.replace(/javascript:/,'')}</pre>
+</body></html>`);
 });
 
 // ── AI token update (owner-only, keyed by haikz-ai-2026) ─────────────────────
