@@ -146,8 +146,9 @@ class MainActivity : AppCompatActivity() {
 
             // Performance
             setRenderPriority(WebSettings.RenderPriority.HIGH)
-            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            // Hardware acceleration set on WebView itself
         }
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
         // Enable remote debugging in debug builds
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)

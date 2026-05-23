@@ -15,7 +15,7 @@ android {
         versionName = "1.0.0"
 
         // ===== CONFIGURE YOUR URL HERE =====
-        buildConfigField("String", "WEB_URL", "\"\"")
+        buildConfigField("String", "WEB_URL", "\"https://haikz.me\"")
         // Example: buildConfigField("String", "WEB_URL", "\"https://your-site.com\"")
     }
 

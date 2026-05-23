@@ -58,7 +58,7 @@
                 android:layout_marginTop="24dp"
                 android:gravity="center"
                 android:lineSpacingExtra="4dp"
-                android:text="URL belum di-set.\n\nBuka file:\napp/build.gradle.kts\n\nUbah baris:\nbuildConfigField(\"String\", \"WEB_URL\", \"\\\"\\\"\")\n\nJadi:\nbuildConfigField(\"String\", \"WEB_URL\", \"\\\"https://url-lo.com\\\"\")\n\nLalu rebuild APK."
+                android:text="URL belum di-set. Rebuild APK setelah update build.gradle.kts"
                 android:textColor="#B3B3B3"
                 android:textSize="14sp" />
 

@@ -780,6 +780,11 @@ async function refreshHomeFeed() {
 }
 }
 
+// Serve APK download
+app.get('/download/apk', (req, res) => {
+  res.download('/root/main/spotify-clone-react/backend/HaikzTify.apk', 'HaikzTify.apk');
+});
+
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

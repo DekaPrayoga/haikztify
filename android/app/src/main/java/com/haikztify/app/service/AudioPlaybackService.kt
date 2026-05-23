@@ -206,11 +206,7 @@ class AudioPlaybackService : MediaSessionService() {
             .setOngoing(isPlaying)
             .setSilent(true)
             .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setMediaSession(
-                        mediaSession?.sessionCompatToken
-                    )
-                    .setShowActionsInCompactView(0, 1, 2)
+                androidx.media3.session.MediaStyleNotificationHelper.MediaStyle(mediaSession!!)
             )
 
         // Album art
