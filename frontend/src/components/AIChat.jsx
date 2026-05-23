@@ -79,7 +79,7 @@ function MessageContent({ text }) {
   );
 }
 
-async function streamChat({ messages, onChunk, onDone, onError }) {
+async function streamChat({ messages, onChunk, onDone, onError, historyDisabled = true }) {
   try {
     const res = await fetch(`${AI_BASE}/v1/chat/completions`, {
       method: 'POST',
@@ -91,6 +91,7 @@ async function streamChat({ messages, onChunk, onDone, onError }) {
         model: 'gpt-5.5-instant',
         messages,
         stream: true,
+        history_disabled: historyDisabled,
       }),
     });
     if (!res.ok || !res.body) {
@@ -213,6 +214,9 @@ export default function AIChat() {
 
     await streamChat({
       messages: apiMessages,
+      // /buatfoto needs history_disabled:false so ChatGPT runs in
+      // permanent (non-temporary) mode where image generation works.
+      historyDisabled: !photoMatch,
       onChunk: (delta) => {
         setMessages(prev => {
           const arr = [...prev];
