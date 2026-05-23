@@ -10,6 +10,7 @@
         android:layout_height="match_parent"
         android:background="#000000" />
 
+    <!-- Top loading progress bar -->
     <ProgressBar
         android:id="@+id/progressBar"
         style="@android:style/Widget.ProgressBar.Horizontal"
@@ -21,12 +22,18 @@
         android:progressDrawable="@drawable/progress_bar"
         android:visibility="gone" />
 
-    <!-- Setup screen shown when URL is not configured -->
+    <!--
+        setupView doubles as:
+          1. "URL not configured" screen (WEB_URL blank)
+          2. "No connection / error" overlay (tap to retry)
+    -->
     <FrameLayout
         android:id="@+id/setupView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#121212"
+        android:clickable="true"
+        android:focusable="true"
         android:visibility="gone">
 
         <LinearLayout
@@ -37,30 +44,48 @@
             android:orientation="vertical"
             android:padding="32dp">
 
+            <!-- Music note emoji -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="🎵"
                 android:textSize="64sp" />
 
+            <!-- App name -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="Haikztify"
+                android:text="HaikZTIFY"
                 android:textColor="#1DB954"
-                android:textSize="32sp"
+                android:textSize="28sp"
                 android:textStyle="bold" />
 
+            <!-- Dynamic status / error message — updated from code -->
+            <TextView
+                android:id="@+id/setupText"
+                android:layout_width="280dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:gravity="center"
+                android:lineSpacingExtra="5dp"
+                android:text="URL belum dikonfigurasi.\nEdit WEB_URL di build.gradle.kts lalu rebuild APK."
+                android:textColor="#B3B3B3"
+                android:textSize="14sp" />
+
+            <!-- Tap-to-retry hint (visible when used as error overlay) -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:gravity="center"
-                android:lineSpacingExtra="4dp"
-                android:text="URL belum di-set. Rebuild APK setelah update build.gradle.kts"
-                android:textColor="#B3B3B3"
-                android:textSize="14sp" />
+                android:layout_marginTop="28dp"
+                android:background="#1DB954"
+                android:paddingHorizontal="24dp"
+                android:paddingVertical="10dp"
+                android:text="Coba Lagi"
+                android:textColor="#000000"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:id="@+id/retryButton" />
 
         </LinearLayout>
     </FrameLayout>

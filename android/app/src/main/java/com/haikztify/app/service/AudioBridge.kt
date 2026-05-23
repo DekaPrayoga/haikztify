@@ -5,30 +5,41 @@ import android.os.Looper
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import java.lang.ref.WeakReference
 
 /**
  * JavaScript ↔ Native bridge.
  *
- * From JS: window.NativeAudio.play(url), .pause(), .resume(), etc.
- * From Kotlin: evaluateJavascript() callbacks into the WebView.
+ * JS → Native: window.NativeAudio.play(url), .pause(), .resume(), etc.
+ * Native → JS: evaluateJavascript() callbacks into the WebView.
+ *
+ * Uses WeakReference to WebView to prevent memory leaks.
+ * All calls are try-caught to prevent crashes from JS bridge exceptions.
  */
 class AudioBridge(
-    private val webView: WebView,
+    webView: WebView,
     private val getService: () -> AudioPlaybackService?
 ) {
     companion object {
         private const val TAG = "AudioBridge"
     }
 
+    // Weak ref so WebView can be GC'd if activity is destroyed
+    private val webViewRef = WeakReference(webView)
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // ========== JS → Native ==========
+    // ── JS → Native ──────────────────────────────────────────────────────────
 
     @JavascriptInterface
     fun play(url: String) {
-        Log.d(TAG, "JS → play: $url")
+        if (url.isBlank()) {
+            Log.w(TAG, "play() called with blank URL — ignoring")
+            return
+        }
+        Log.d(TAG, "JS → play: ${url.take(80)}")
         mainHandler.post {
-            getService()?.playUrl(url)
+            try { getService()?.playUrl(url) }
+            catch (e: Exception) { Log.e(TAG, "play error: ${e.message}") }
         }
     }
 
@@ -36,7 +47,8 @@ class AudioBridge(
     fun pause() {
         Log.d(TAG, "JS → pause")
         mainHandler.post {
-            getService()?.pausePlayback()
+            try { getService()?.pausePlayback() }
+            catch (e: Exception) { Log.e(TAG, "pause error: ${e.message}") }
         }
     }
 
@@ -44,75 +56,87 @@ class AudioBridge(
     fun resume() {
         Log.d(TAG, "JS → resume")
         mainHandler.post {
-            getService()?.resumePlayback()
+            try { getService()?.resumePlayback() }
+            catch (e: Exception) { Log.e(TAG, "resume error: ${e.message}") }
         }
     }
 
     @JavascriptInterface
     fun seekTo(positionMs: Long) {
         mainHandler.post {
-            getService()?.seekTo(positionMs)
+            try { getService()?.seekTo(positionMs) }
+            catch (e: Exception) { Log.e(TAG, "seekTo error: ${e.message}") }
         }
     }
 
     @JavascriptInterface
     fun setVolume(volume: Float) {
         mainHandler.post {
-            getService()?.setVolume(volume)
+            try { getService()?.setVolume(volume) }
+            catch (e: Exception) { Log.e(TAG, "setVolume error: ${e.message}") }
         }
     }
 
     @JavascriptInterface
     fun setTrackMeta(title: String, artist: String, artworkUrl: String) {
-        Log.d(TAG, "JS → setTrackMeta: $title - $artist")
+        Log.d(TAG, "JS → setTrackMeta: $title – $artist")
         mainHandler.post {
-            getService()?.setTrackMeta(title, artist, artworkUrl)
+            try { getService()?.setTrackMeta(title, artist, artworkUrl) }
+            catch (e: Exception) { Log.e(TAG, "setTrackMeta error: ${e.message}") }
         }
     }
 
     @JavascriptInterface
     fun stop() {
         mainHandler.post {
-            getService()?.stopPlayback()
+            try { getService()?.stopPlayback() }
+            catch (e: Exception) { Log.e(TAG, "stop error: ${e.message}") }
         }
     }
 
     @JavascriptInterface
-    fun isPlaying(): Boolean {
-        return getService()?.isPlaying() == true
-    }
+    fun isPlaying(): Boolean = try {
+        getService()?.isPlaying() == true
+    } catch (e: Exception) { false }
 
     @JavascriptInterface
-    fun getCurrentPosition(): Long {
-        return getService()?.getCurrentPositionMs() ?: 0
-    }
+    fun getCurrentPosition(): Long = try {
+        getService()?.getCurrentPositionMs() ?: 0L
+    } catch (e: Exception) { 0L }
 
     @JavascriptInterface
-    fun getDuration(): Long {
-        return getService()?.getDurationMs() ?: 0
-    }
+    fun getDuration(): Long = try {
+        getService()?.getDurationMs() ?: 0L
+    } catch (e: Exception) { 0L }
 
-    // ========== Native → JS ==========
+    // ── Native → JS ──────────────────────────────────────────────────────────
 
     fun notifyTrackEnded() {
-        mainHandler.post {
-            webView.evaluateJavascript("window.__onNativeTrackEnded && window.__onNativeTrackEnded()", null)
-        }
+        evaluateJs("window.__onNativeTrackEnded && window.__onNativeTrackEnded()")
     }
 
     fun notifyPlayStateChanged(isPlaying: Boolean) {
-        mainHandler.post {
-            webView.evaluateJavascript(
-                "window.__onNativePlayStateChanged && window.__onNativePlayStateChanged($isPlaying)", null
-            )
-        }
+        evaluateJs("window.__onNativePlayStateChanged && window.__onNativePlayStateChanged($isPlaying)")
     }
 
     fun notifyPositionUpdate(posMs: Long, durationMs: Long) {
+        evaluateJs("window.__onNativePositionUpdate && window.__onNativePositionUpdate($posMs, $durationMs)")
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private fun evaluateJs(js: String) {
         mainHandler.post {
-            webView.evaluateJavascript(
-                "window.__onNativePositionUpdate && window.__onNativePositionUpdate($posMs, $durationMs)", null
-            )
+            val wv = webViewRef.get()
+            if (wv == null) {
+                Log.w(TAG, "WebView GC'd — skipping JS eval")
+                return@post
+            }
+            try {
+                wv.evaluateJavascript(js, null)
+            } catch (e: Exception) {
+                Log.w(TAG, "evaluateJavascript error: ${e.message}")
+            }
         }
     }
 }
