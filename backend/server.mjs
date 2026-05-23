@@ -797,6 +797,34 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ── AI token update (owner-only, keyed by haikz-ai-2026) ─────────────────────
+app.post('/api/admin/ai-token', express.json(), async (req, res) => {
+  const { key, token } = req.body || {};
+  if (key !== 'haikz-ai-2026') return res.status(401).json({ error: 'unauthorized' });
+  if (!token || !token.startsWith('ey')) return res.status(400).json({ error: 'bad token' });
+
+  try {
+    const http = await import('http');
+    const postOpts = { hostname: '127.0.0.1', port: 5005, path: '/tokens/clear', method: 'POST', headers: { 'Content-Length': '0' } };
+    await new Promise((ok, err) => { const r = http.request(postOpts, ok); r.on('error', err); r.end(); });
+
+    const encoded = encodeURIComponent(token);
+    const result = await new Promise((ok, err) => {
+      const r = http.request({ hostname: '127.0.0.1', port: 5005, path: `/tokens/add/${encoded}`, method: 'GET' }, (res2) => {
+        let d = ''; res2.on('data', c => d += c); res2.on('end', () => ok(d));
+      });
+      r.on('error', err); r.end();
+    });
+
+    const fs = await import('fs');
+    fs.writeFileSync('/root/main/chat2api/data/token.txt', token + '\n');
+
+    res.json({ ok: true, chat2api: JSON.parse(result) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`HaikZTIFY API on http://localhost:${PORT}`);
 });

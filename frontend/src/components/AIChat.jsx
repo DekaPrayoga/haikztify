@@ -7,6 +7,10 @@ import 'katex/dist/katex.min.css';
 
 const AI_BASE = 'https://api.haikz.me/ai';
 const AI_AUTH = 'haikz-ai-2026';
+// Text chat uses freemodel.dev (HAZIK_API_KEY) — no token expiry.
+// buatfoto still calls chat2api /v1/buatfoto (needs ChatGPT session for image gen).
+const FM_BASE = 'https://api.freemodel.dev/v1';
+const FM_KEY  = 'fe_oa_37174606ff6f81a82238e749bec080db461d39112d74ec7a';
 const STORAGE_KEY = 'haikz_ai_chat_v1';
 const MAX_HISTORY = 20; // last N user+assistant messages sent to AI
 
@@ -95,19 +99,18 @@ async function generateImage(prompt) {
   return await res.json();
 }
 
-async function streamChat({ messages, onChunk, onDone, onError, historyDisabled = true }) {
+async function streamChat({ messages, onChunk, onDone, onError }) {
   try {
-    const res = await fetch(`${AI_BASE}/v1/chat/completions`, {
+    const res = await fetch(`${FM_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${AI_AUTH}`,
+        Authorization: `Bearer ${FM_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.5-instant',
+        model: 'gpt-5.5',
         messages,
         stream: true,
-        history_disabled: historyDisabled,
       }),
     });
     if (!res.ok || !res.body) {
@@ -260,7 +263,6 @@ export default function AIChat() {
 
     await streamChat({
       messages: apiMessages,
-      historyDisabled: true,
       onChunk: (delta) => {
         setMessages(prev => {
           const arr = [...prev];
