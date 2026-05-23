@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ALL_SONGS } from '../data/catalog';
+import { ALL_SONGS, MUSIC_CATALOG } from '../data/catalog';
 import { API_BASE } from '../services/spotifyApi';
 import usePlayerStore from '../store/playerStore';
+
+// Local catalog fallback sections (used when Spotify API is down/rate-limited)
+const CATALOG_SECTIONS = Object.entries(MUSIC_CATALOG).map(([genre, songs]) => ({
+  id: `local_${genre}`,
+  title: genre === 'indo' ? 'Indonesia Terdepan' : genre === 'pop' ? 'Tangga Lagu Pop' :
+         genre === 'hiphop' ? 'Hip-Hop Terpanas' : genre === 'kpop' ? 'K-Pop Wave' :
+         genre.charAt(0).toUpperCase() + genre.slice(1),
+  tracks: songs.map((s, i) => ({ ...s, id: `${genre}_${i}`, genre })),
+})).filter(s => s.tracks.length > 0);
 
 function ArtCard({ item, onClick, badge }) {
   return (
@@ -136,8 +145,7 @@ export default function Home() {
             ...s,
             tracks: wrapTracks(s.tracks),
           })),
-        });
-        setLoading(false);
+        });        setLoading(false);
       })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -146,7 +154,11 @@ export default function Home() {
   const startListening = feed?.startListening || [];
   const mixes = feed?.mixes || [];
   const radios = feed?.radios || [];
-  const genreSections = feed?.genreSections || [];
+  // Use Spotify sections if loaded, else fall back to local catalog
+  const apiSections = feed?.genreSections || [];
+  const genreSections = apiSections.some(s => s.tracks.length > 0)
+    ? apiSections
+    : CATALOG_SECTIONS;
 
   // Build the "Untukmu" mixed pool: dedupe + shuffle once across all genre tracks
   const [shuffledPool, setShuffledPool] = useState([]);

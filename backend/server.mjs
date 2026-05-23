@@ -676,75 +676,68 @@ app.get('/api/feed/home', async (req, res) => {
   if (homeFeedCache.data && now < homeFeedCache.expires_at) {
     return res.json(homeFeedCache.data);
   }
-  // (cache populated at the bottom before send)
-  // Each section has multiple queries (Spotify Dev-Mode caps search limit at 10,
-  // so we run several queries per section to reach ~25-30 tracks).
+  // Return stale cache immediately while refreshing in background if near/past expiry
+  if (homeFeedCache.data) {
+    res.json(homeFeedCache.data);
+    // Refresh async so next request gets fresh data
+    refreshHomeFeed().catch(() => {});
+    return;
+  }
+  // First load — build and cache
+  const payload = await refreshHomeFeed();
+  res.json(payload);
+});
+
+async function refreshHomeFeed() {
+  // Reduced to 6 sections × 1 query each = 6 Spotify calls (was 39).
+  // Artist lookups reduced from 70 to 20. Cache 6 hours to avoid rate-limit.
   const SECTIONS = [
-    { id: 'topGlobal',   title: 'Tangga Lagu Unggulan Global',
-      qs: ['genre:pop year:2025-2026', 'genre:pop year:2024', 'top hits 2025'] },
-    { id: 'indonesia',   title: 'Indonesia Terdepan',
-      qs: ['genre:indonesian-pop year:2024-2026', 'indo pop year:2023-2025', 'tulus OR raisa OR mahalini'] },
-    { id: 'indonesiaPilihan', title: 'Artis Indonesia Pilihan',
-      qs: ['nadhif basalamah OR juicy luicy OR pamungkas', 'lyodra OR bernadya OR sal priadi', 'hindia OR feast OR reality club'] },
-    { id: 'hipHop',      title: 'Hip-Hop Terpanas',
-      qs: ['genre:hip-hop year:2024-2026', 'genre:rap year:2024-2026', 'drake OR kendrick OR travis scott'] },
-    { id: 'rnb',         title: 'R&B & Soul',
-      qs: ['genre:r-n-b year:2023-2026', 'genre:soul year:2020-2026', 'sza OR weeknd OR daniel caesar'] },
-    { id: 'rock',        title: 'Rock & Alternative',
-      qs: ['genre:rock year:2020-2026', 'genre:alt-rock year:2015-2026', 'arctic monkeys OR radiohead OR strokes'] },
-    { id: 'indie',       title: 'Indie Picks',
-      qs: ['genre:indie year:2020-2026', 'genre:indie-pop year:2020-2026', 'rex orange OR clairo OR boy pablo'] },
-    { id: 'kpop',        title: 'K-Pop Wave',
-      qs: ['genre:k-pop year:2023-2026', 'bts OR newjeans OR blackpink', 'seventeen OR twice OR aespa'] },
-    { id: 'galau',       title: 'Lagu Galau',
-      qs: ['genre:indonesian-pop sad', 'sad indo', 'lagu galau 2024'] },
-    { id: 'semangat',    title: 'Lagu Semangat',
-      qs: ['workout 2025', 'hype 2025', 'energetic pop 2024'] },
-    { id: 'chill',       title: 'Acoustic & Chill',
-      qs: ['acoustic chill 2024', 'chill indie 2024', 'lo-fi 2024'] },
-    { id: 'edm',         title: 'EDM & Dance Floor',
-      qs: ['genre:edm year:2024-2026', 'genre:dance year:2024-2026', 'house music 2025'] },
-    { id: 'throwbacks',  title: 'Throwbacks 2000-2015',
-      qs: ['genre:pop year:2005-2010', 'genre:pop year:2010-2015', 'classic hits 2000s'] },
+    { id: 'topGlobal',   title: 'Tangga Lagu Unggulan Global', q: 'genre:pop year:2025' },
+    { id: 'indonesia',   title: 'Indonesia Terdepan',          q: 'tulus OR raisa OR mahalini year:2023-2026' },
+    { id: 'hipHop',      title: 'Hip-Hop Terpanas',            q: 'genre:hip-hop year:2024' },
+    { id: 'kpop',        title: 'K-Pop Wave',                  q: 'genre:k-pop year:2024' },
+    { id: 'indie',       title: 'Indie Picks',                 q: 'genre:indie year:2023-2025' },
+    { id: 'throwbacks',  title: 'Throwbacks 2000-2015',        q: 'genre:pop year:2005-2012' },
   ];
 
-  async function runSection(s) {
-    const arrays = await Promise.all(s.qs.map(q =>
-      spotifyGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=10&offset=0`)
-        .then(d => (d?.tracks?.items || []).map(mapTrack).filter(Boolean))
-        .catch(() => [])
-    ));
-    const seen = new Set();
-    const tracks = [];
-    for (const arr of arrays) {
-      for (const t of arr) {
-        if (!seen.has(t.id)) { seen.add(t.id); tracks.push(t); }
-      }
+  // Stagger Spotify calls (max 5 concurrent) to avoid rate-limit
+  async function batchSpotify(tasks, batchSize = 5, delayMs = 300) {
+    const results = [];
+    for (let i = 0; i < tasks.length; i += batchSize) {
+      const batch = tasks.slice(i, i + batchSize);
+      results.push(...await Promise.all(batch));
+      if (i + batchSize < tasks.length) await new Promise(r => setTimeout(r, delayMs));
     }
-    return { id: s.id, title: s.title, tracks };
+    return results;
   }
 
-  async function lookupArtist(name) {
-    const d = await spotifyGet(`/search?q=${encodeURIComponent(name)}&type=artist&limit=1`).catch(() => null);
-    return d?.artists?.items?.[0] || null;
-  }
+  // Run sections
+  const sectionTasks = SECTIONS.map(s => () =>
+    spotifyGet(`/search?q=${encodeURIComponent(s.q)}&type=track&limit=10`)
+      .then(d => ({ id: s.id, title: s.title, tracks: (d?.tracks?.items || []).map(mapTrack).filter(Boolean) }))
+      .catch(() => ({ id: s.id, title: s.title, tracks: [] }))
+  );
+  const sectionResults = await batchSpotify(sectionTasks.map(t => t()), 4, 400);
 
-  const [ownerData, sectionResults, indoArtistResults, intlArtistResults] = await Promise.all([
-    Promise.all([
-      ownerGet('/me/following?type=artist&limit=20').catch(() => null),
-      ownerGet('/me/player/recently-played?limit=20').catch(() => null),
-    ]),
-    Promise.all(SECTIONS.map(runSection)),
-    Promise.all(ARTISTS_INDO.map(lookupArtist)),
-    Promise.all(ARTISTS_INTL.map(lookupArtist)),
+  // Only lookup 10 indo + 10 intl artists (was 70)
+  const artistNames = [...ARTISTS_INDO.slice(0, 10), ...ARTISTS_INTL.slice(0, 10)];
+  const artistTasks = artistNames.map(name =>
+    spotifyGet(`/search?q=${encodeURIComponent(name)}&type=artist&limit=1`)
+      .then(d => d?.artists?.items?.[0] || null).catch(() => null)
+  );
+  const artistResults = await batchSpotify(artistTasks, 5, 300);
+  const allArtists = artistResults.filter(Boolean);
+
+  // Owner followed artists (no Spotify search needed)
+  const [followedRaw, recentRaw] = await Promise.all([
+    ownerGet('/me/following?type=artist&limit=20').catch(() => null),
+    ownerGet('/me/player/recently-played?limit=20').catch(() => null),
   ]);
-
-  const [followedRaw, recentRaw] = ownerData;
   const followedArtists = (followedRaw?.artists?.items || []).map(a => ({
     id: a.id, name: a.name, image: a.images?.[0]?.url || '',
   }));
 
-  // Recently played → "Mulai mendengarkan"
+  // Recently played
   const recentSeen = new Set();
   const recentTracks = [];
   for (const item of (recentRaw?.items || [])) {
@@ -752,54 +745,40 @@ app.get('/api/feed/home', async (req, res) => {
     if (t && !recentSeen.has(t.id)) { recentSeen.add(t.id); recentTracks.push(t); }
   }
 
-  // Followed-artist top tracks for the personalized mix (parallel)
-  const followedTopArrays = await Promise.all(
-    followedArtists.slice(0, 6).map(a =>
+  // Followed-artist search (4 artists max)
+  const followedTopArrays = await batchSpotify(
+    followedArtists.slice(0, 4).map(a =>
       spotifyGet(`/search?q=${encodeURIComponent('artist:"' + a.name + '"')}&type=track&limit=10`)
-        .then(d => (d?.tracks?.items || []).map(mapTrack).filter(Boolean))
-        .catch(() => [])
-    )
+        .then(d => (d?.tracks?.items || []).map(mapTrack).filter(Boolean)).catch(() => [])
+    ),
+    4, 300
   );
   const interleaved = [];
-  for (let i = 0; i < 5; i++) {
-    for (const arr of followedTopArrays) if (arr[i]) interleaved.push(arr[i]);
-  }
+  for (let i = 0; i < 5; i++) for (const arr of followedTopArrays) if (arr[i]) interleaved.push(arr[i]);
   const startListening = [...recentTracks, ...interleaved]
-    .filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i)
-    .slice(0, 30);
+    .filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i).slice(0, 30);
 
-  // Build Mix/Radio cards from curated roster (35 indo + 35 intl)
-  const toCard = (a, prefix, subtitle) => ({
-    id: `${prefix}_${a.id}`,
-    artistId: a.id,
-    title: prefix === 'mix' ? `Mix ${a.name}` : a.name,
-    subtitle: subtitle || (a.genres || []).slice(0, 2).join(', ') || 'Lagu mirip',
-    cover: a.images?.[0]?.url || '',
-  });
-  const indoArtists = indoArtistResults.filter(Boolean);
-  const intlArtists = intlArtistResults.filter(Boolean);
-  // Interleave indo + intl so the row alternates
-  const interleavedArtists = [];
-  const maxLen = Math.max(indoArtists.length, intlArtists.length);
-  for (let i = 0; i < maxLen; i++) {
-    if (indoArtists[i]) interleavedArtists.push(indoArtists[i]);
-    if (intlArtists[i]) interleavedArtists.push(intlArtists[i]);
-  }
-  const mixCards = interleavedArtists.map(a => toCard(a, 'mix')).filter(c => c.cover);
-  const radioCards = interleavedArtists.slice(0, 24).map(a => toCard(a, 'radio', 'Radio')).filter(c => c.cover);
+  const mixSeed = allArtists.length ? allArtists : followedArtists;
+  const mixCards = mixSeed.map(a => ({
+    id: `mix_${a.id}`, artistId: a.id,
+    title: `Mix ${a.name}`,
+    subtitle: (a.genres || []).slice(0, 2).join(', ') || 'Lagu mirip',
+    cover: a.images?.[0]?.url || a.image || '',
+  })).filter(m => m.cover);
+  const radioCards = mixSeed.slice(0, 12).map(a => ({
+    id: `radio_${a.id}`, artistId: a.id,
+    title: a.name, subtitle: 'Radio',
+    cover: a.images?.[0]?.url || a.image || '',
+  })).filter(r => r.cover);
 
   const payload = {
     profile: { id: 'owner', name: followedRaw ? 'h' : null },
-    sections: {
-      startListening,
-      mixes: mixCards,
-      radios: radioCards,
-      genreSections: sectionResults,
-    },
+    sections: { startListening, mixes: mixCards, radios: radioCards, genreSections: sectionResults },
   };
-  homeFeedCache = { data: payload, expires_at: Date.now() + 60 * 60 * 1000 };
-  res.json(payload);
-});
+  homeFeedCache = { data: payload, expires_at: Date.now() + 6 * 60 * 60 * 1000 }; // 6 hours
+  return payload;
+}
+}
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
