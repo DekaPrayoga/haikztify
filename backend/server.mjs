@@ -336,7 +336,16 @@ app.get(['/api/yt-stream', '/api/proxy'], async (req, res) => {
   const url = req.query.url;
   if (!url) return res.status(400).send('Missing url');
   try {
-    const headers = { 'User-Agent': 'Mozilla/5.0' };
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+    };
+    // SoundCloud CDN requires Referer
+    if (url.includes('sndcdn.com') || url.includes('soundcloud')) {
+      headers['Referer'] = 'https://soundcloud.com/';
+      headers['Origin'] = 'https://soundcloud.com';
+    }
     if (req.headers.range) headers.Range = req.headers.range;
     const response = await fetch(url, { headers });
     res.status(response.status);
