@@ -1,33 +1,34 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ALL_SONGS } from '../data/catalog';
-import {
-  getTrending,
-  getFeedRecentlyPlayed,
-  getFeedTopTracks,
-  getFeedRecommendations,
-  getFeedPlaylists,
-  getFeedMe,
-} from '../services/spotifyApi';
+import { API_BASE } from '../services/spotifyApi';
 import usePlayerStore from '../store/playerStore';
 
-function Card({ item, onClick }) {
+function ArtCard({ item, onClick, badge }) {
   return (
     <div className="card" onClick={onClick}>
       <div className="card-img-wrap">
         <img src={item.cover} alt="" loading="lazy"
           onError={(e) => { e.target.style.background = '#282828'; e.target.src = ''; }} />
+        {badge && (
+          <span style={{
+            position: 'absolute', top: 8, left: 8,
+            background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 10,
+            fontWeight: 800, letterSpacing: 1, padding: '3px 8px',
+            borderRadius: 4, textTransform: 'uppercase',
+          }}>{badge}</span>
+        )}
         <div className="card-play-btn">
           <svg viewBox="0 0 24 24" fill="black"><path d="M8 5.14v14l11-7-11-7z"/></svg>
         </div>
       </div>
       <div className="card-title">{item.title}</div>
-      <div className="card-sub">{item.desc || item.artist || ''}</div>
+      <div className="card-sub">{item.subtitle || ''}</div>
     </div>
   );
 }
 
-function CardSection({ title, items, loading, onCardClick, keyPrefix }) {
+function CardSection({ title, items, loading, onCardClick, badge, keyPrefix }) {
   if (!loading && items.length === 0) return null;
   return (
     <section className="home-section">
@@ -39,7 +40,7 @@ function CardSection({ title, items, loading, onCardClick, keyPrefix }) {
         : (
           <div className="card-row" style={{ alignItems: 'flex-start' }}>
             {items.map((item, i) => (
-              <Card key={`${keyPrefix}_${item.id || i}`} item={item}
+              <ArtCard key={`${keyPrefix}_${item.id || i}`} item={item} badge={badge}
                 onClick={() => onCardClick && onCardClick(item)} />
             ))}
           </div>
@@ -85,47 +86,54 @@ function TrackSection({ title, tracks, loading, onTrackClick }) {
 export default function Home() {
   const navigate = useNavigate();
   const { playTrack } = usePlayerStore();
-  const [me, setMe] = useState(null);
-  const [recent, setRecent] = useState([]);
-  const [top, setTop] = useState([]);
-  const [recs, setRecs] = useState([]);
-  const [playlists, setPlaylists] = useState([]);
-  const [trending, setTrending] = useState([]);
+  const [feed, setFeed] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const h = new Date().getHours();
   const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  const greeting = me?.name ? `${greet}, ${me.name.split(' ')[0]}` : greet;
+  const name = feed?.profile?.name;
+  const greeting = name ? `${greet}, ${name}` : greet;
   const quickPicks = ALL_SONGS.slice(0, 8);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      getFeedMe(),
-      getFeedRecentlyPlayed(20),
-      getFeedTopTracks(10, 'short_term'),
-      getFeedRecommendations(20),
-      getFeedPlaylists(20),
-      getTrending(10, 0),
-    ]).then(([m, r, t, rec, pl, tr]) => {
-      if (cancelled) return;
-      setMe(m);
-      setRecent(r);
-      setTop(t);
-      setRecs(rec);
-      setPlaylists(pl);
-      setTrending(tr.tracks || []);
-      setLoading(false);
-    }).catch(() => { if (!cancelled) setLoading(false); });
+    fetch(`${API_BASE}/api/feed/home`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data) { setLoading(false); return; }
+        const wrapTracks = (arr) => (arr || []).map(t => ({
+          ...t,
+          id: `spotify_${t.id}`,
+          spotifyId: t.id,
+          src: t.src ? `${API_BASE}/api/proxy?url=${encodeURIComponent(t.src)}` : null,
+        }));
+        setFeed({
+          profile: data.profile,
+          startListening: wrapTracks(data.sections?.startListening),
+          mixes: data.sections?.mixes || [],
+          radios: data.sections?.radios || [],
+          charts: wrapTracks(data.sections?.charts),
+        });
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  const startListening = feed?.startListening || [];
+  const mixes = feed?.mixes || [];
+  const radios = feed?.radios || [];
+  const charts = feed?.charts || [];
 
   return (
     <div className="page-home">
       <h2 className="section-heading greeting">{greeting}</h2>
+      <p style={{ color: '#b3b3b3', fontSize: 14, marginTop: -12, marginBottom: 24 }}>
+        Nikmati sesi berdasarkan seleramu
+      </p>
 
-      {/* Quick Picks */}
+      {/* Quick Picks — local catalog shortcuts */}
       <div className="quick-grid">
         {quickPicks.map(s => (
           <div key={s.id} className="quick-card" onClick={() => playTrack(s, quickPicks)}>
@@ -139,25 +147,21 @@ export default function Home() {
         ))}
       </div>
 
-      <TrackSection title="Recently played"
-        tracks={recent} loading={loading} onTrackClick={playTrack} />
+      <TrackSection title="Mulai mendengarkan"
+        tracks={startListening} loading={loading} onTrackClick={playTrack} />
 
-      <TrackSection title="Your top tracks"
-        tracks={top} loading={loading} onTrackClick={playTrack} />
+      <CardSection title="Untuk membantu kamu mulai mendengarkan"
+        items={mixes} loading={loading}
+        onCardClick={(item) => navigate(`/artist/${item.artistId}`)}
+        keyPrefix="mix" />
 
-      <CardSection title="Made for you"
-        items={recs.map(t => ({ ...t, desc: t.artist }))}
-        loading={loading}
-        onCardClick={(item) => playTrack(item, recs)}
-        keyPrefix="rec" />
+      <CardSection title="Stasiun Radio yang Direkomendasikan"
+        items={radios} loading={loading} badge="Radio"
+        onCardClick={(item) => navigate(`/artist/${item.artistId}`)}
+        keyPrefix="radio" />
 
-      <CardSection title="Your playlists"
-        items={playlists} loading={loading}
-        onCardClick={(item) => navigate(`/spotify-playlist/${item.id}`)}
-        keyPrefix="ownpl" />
-
-      <TrackSection title="Trending now"
-        tracks={trending} loading={loading} onTrackClick={playTrack} />
+      <TrackSection title="Tangga Lagu Unggulan"
+        tracks={charts} loading={loading} onTrackClick={playTrack} />
     </div>
   );
 }

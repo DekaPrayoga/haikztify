@@ -625,6 +625,89 @@ app.get('/api/feed/playlist/:id/tracks', async (req, res) => {
   res.json({ tracks, total: data.total || tracks.length });
 });
 
+app.get('/api/feed/followed-artists', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+  const data = await ownerGet(`/me/following?type=artist&limit=${limit}`);
+  const items = (data?.artists?.items || []).map(a => ({
+    id: a.id,
+    name: a.name,
+    image: a.images?.[0]?.url || '',
+    genres: a.genres || [],
+    followers: a.followers?.total || 0,
+  }));
+  res.json({ artists: items });
+});
+
+// Assembled "Spotify-style" home feed for the owner. Falls back to followed
+// artists when listening history is empty.
+app.get('/api/feed/home', async (req, res) => {
+  const [recent, top, followed, trending] = await Promise.all([
+    ownerGet('/me/player/recently-played?limit=20').catch(() => null),
+    ownerGet('/me/top/tracks?limit=10&time_range=medium_term').catch(() => null),
+    ownerGet('/me/following?type=artist&limit=10').catch(() => null),
+    spotifyGet(`/search?q=${encodeURIComponent('genre:pop year:2025')}&type=track&limit=10&offset=0`).catch(() => null),
+  ]);
+
+  const recentTracks = [];
+  const seen = new Set();
+  for (const item of (recent?.items || [])) {
+    const t = mapTrack(item.track);
+    if (t && !seen.has(t.id)) { seen.add(t.id); recentTracks.push(t); }
+  }
+
+  const topTracks = (top?.items || []).map(mapTrack).filter(Boolean);
+  const followedArtists = (followed?.artists?.items || []).map(a => ({
+    id: a.id,
+    name: a.name,
+    image: a.images?.[0]?.url || '',
+  }));
+
+  // For each followed artist, pull top tracks (parallel) for the "Mulai mendengarkan" mix.
+  // Use search by artist name (the /artists/:id/top-tracks endpoint is deprecated for new apps).
+  const artistTopArrays = await Promise.all(
+    followedArtists.slice(0, 6).map(a =>
+      spotifyGet(`/search?q=${encodeURIComponent('artist:"' + a.name + '"')}&type=track&limit=10`)
+        .then(d => (d?.tracks?.items || []).map(mapTrack).filter(Boolean))
+        .catch(() => [])
+    )
+  );
+
+  // Interleave 2 tracks per artist → diverse mix
+  const startListening = [];
+  for (let i = 0; i < 3; i++) {
+    for (const arr of artistTopArrays) {
+      if (arr[i]) startListening.push(arr[i]);
+    }
+  }
+  // Prepend recently-played + top tracks if available
+  const startSection = [...recentTracks.slice(0, 5), ...topTracks.slice(0, 5), ...startListening].slice(0, 20);
+
+  const charts = (trending?.tracks?.items || []).map(mapTrack).filter(Boolean);
+
+  res.json({
+    profile: { id: 'owner', name: 'h' },
+    sections: {
+      startListening: startSection,
+      followedArtists,
+      mixes: followedArtists.map(a => ({
+        id: `mix_${a.id}`,
+        artistId: a.id,
+        title: `Mix ${a.name}`,
+        subtitle: 'Lagu mirip',
+        cover: a.image,
+      })),
+      radios: followedArtists.map(a => ({
+        id: `radio_${a.id}`,
+        artistId: a.id,
+        title: a.name,
+        subtitle: 'Radio',
+        cover: a.image,
+      })),
+      charts,
+    },
+  });
+});
+
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
