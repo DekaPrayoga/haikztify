@@ -778,7 +778,6 @@ async function refreshHomeFeed() {
   homeFeedCache = { data: payload, expires_at: Date.now() + 6 * 60 * 60 * 1000 }; // 6 hours
   return payload;
 }
-}
 
 // Serve APK download
 app.get('/download/apk', (req, res) => {
