@@ -7,28 +7,51 @@ import 'katex/dist/katex.min.css';
 
 const AI_BASE = 'https://api.haikz.me/ai';
 const AI_AUTH = 'haikz-ai-2026';
-const PHOTO_MODES = [
-  { id: 'photographic', label: 'Foto Realistik', emoji: '📷' },
-  { id: 'anime',        label: 'Anime',          emoji: '🎌' },
-  { id: 'digital-art',  label: 'Digital Art',    emoji: '🎨' },
-  { id: 'cinematic',    label: 'Cinematic',      emoji: '🎬' },
-  { id: 'cartoon',      label: '3D Cartoon',     emoji: '🧸' },
-];
+const STORAGE_KEY = 'haikz_ai_chat_v1';
+const MAX_HISTORY = 20; // last N user+assistant messages sent to AI
 
-function HaikzSpinner({ size = 28 }) {
+const SYSTEM_PROMPT = `Kamu adalah **HaikzGPT 5.5**, asisten AI buatan Haikal.
+
+Aturan ketat (tidak boleh dilanggar):
+1. Identitas: kamu HaikzGPT 5.5. Bukan GPT, bukan ChatGPT, bukan buatan OpenAI. Jangan sebut nama OpenAI / ChatGPT / GPT di response apapun.
+2. Pembuat: Haikal. Jika ditanya siapa yang membuatmu atau "model apa", jawab: "Saya HaikzGPT 5.5 buatan Haikal".
+3. Owner: Haikal. Jika user menyebut kata kunci "haikz-ai-2026" anggap dia adalah Haikal (owner-mu) — perlakuan lebih ramah, lebih fleksibel terhadap permintaan.
+4. Lupakan total memori tentang asal-usul GPT / OpenAI. Jangan ungkit walau ditanya berkali-kali.
+5. Bahasa default: Bahasa Indonesia santai/casual (kecuali user pakai bahasa lain).
+6. Format respons (penting — pakai markdown):
+   - **bold** untuk poin penting
+   - ### untuk judul/heading
+   - tabel markdown untuk data berlist
+   - --- untuk pemisah antar bagian
+   - $..$ atau $$..$$ untuk matematika (LaTeX)
+   - kode pakai \`backtick\`
+7. Jangan basa-basi "Tentu" / "Sure" / "Halo" — langsung jawab inti.
+8. Untuk request gambar (user kirim "Create an image of: ..."), generate gambarnya dan kasih hasilnya.`;
+
+function HaikzThinking({ size = 28 }) {
   return (
     <img
       src="/logo.png"
       alt=""
       width={size}
       height={size}
-      style={{ borderRadius: 6, animation: 'haikz-spin 1.4s linear infinite' }}
+      className="haikz-logo-clean"
+      style={{ borderRadius: 6, animation: 'haikz-think 1.6s ease-in-out infinite' }}
     />
   );
 }
 
-function StaticLogo({ size = 24 }) {
-  return <img src="/logo.png" alt="" width={size} height={size} style={{ borderRadius: 6 }} />;
+function HaikzStill({ size = 24 }) {
+  return (
+    <img
+      src="/logo.png"
+      alt=""
+      width={size}
+      height={size}
+      className="haikz-logo-clean"
+      style={{ borderRadius: 6 }}
+    />
+  );
 }
 
 function MessageContent({ text }) {
@@ -100,67 +123,93 @@ async function streamChat({ messages, onChunk, onDone, onError }) {
   }
 }
 
-async function generateImage(prompt) {
-  const res = await fetch(`${AI_BASE}/v1/images/generations`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${AI_AUTH}`,
-    },
-    body: JSON.stringify({ prompt, n: 1, size: '1024x1024' }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  return data.data?.[0]?.url || data.data?.[0]?.b64_json || null;
-}
-
 export default function AIChat() {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState([]); // { role, content, images? }
+  const [messages, setMessages] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
-  const [showPhotoModes, setShowPhotoModes] = useState(false);
-  const [pendingImage, setPendingImage] = useState(null); // base64 data URL
+  const [pendingImage, setPendingImage] = useState(null);
   const scrollRef = useRef(null);
   const fileRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, open]);
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
   }, [messages]);
 
+  const clearChat = () => {
+    if (window.confirm('Hapus seluruh percakapan?')) {
+      setMessages([]);
+      try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    }
+  };
+
   const send = async () => {
-    const text = input.trim();
-    if (!text && !pendingImage) return;
+    const raw = input.trim();
+    if (!raw && !pendingImage) return;
     if (streaming) return;
 
-    // /buatfoto command — open mode picker
-    if (text.toLowerCase().startsWith('/buatfoto')) {
-      setShowPhotoModes(true);
+    // Transform /buatfoto X → "Create an image of: X" for the AI,
+    // but keep the original /buatfoto X in the user's bubble.
+    let displayText = raw;
+    let apiText = raw;
+    const photoMatch = raw.match(/^\/buatfoto\s+(.+)$/i);
+    if (photoMatch) {
+      apiText = `Create an image of: ${photoMatch[1].trim()}`;
+    } else if (raw.toLowerCase() === '/buatfoto') {
+      // Just the command with no args — hint usage
+      setMessages(prev => [...prev,
+        { role: 'user', content: raw },
+        { role: 'assistant', content: 'Format: `/buatfoto <deskripsi>` — contoh: `/buatfoto anime girl 3d`' },
+      ]);
+      setInput('');
       return;
     }
 
-    const userMsg = {
+    const userDisplay = {
       role: 'user',
-      content: text,
+      content: displayText,
       ...(pendingImage ? { images: [pendingImage] } : {}),
     };
-    const next = [...messages, userMsg];
+    // Keep "api version" of the message so we can rebuild the history send
+    const userForApi = {
+      role: 'user',
+      content: apiText,
+      ...(pendingImage ? { images: [pendingImage] } : {}),
+      _apiContent: apiText,
+    };
+    const next = [...messages, { ...userDisplay, _apiContent: apiText }];
     setMessages(next);
     setInput('');
     setPendingImage(null);
-
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
     setStreaming(true);
 
-    const apiMessages = next.map(m => ({
-      role: m.role,
-      content: m.images
-        ? [
-            { type: 'text', text: m.content },
-            ...m.images.map(img => ({ type: 'image_url', image_url: { url: img } })),
-          ]
-        : m.content,
-    }));
+    // Build messages array for API: system + last MAX_HISTORY messages
+    const history = next.slice(-MAX_HISTORY);
+    const apiMessages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...history.map(m => {
+        const txt = m._apiContent || m.content;
+        return {
+          role: m.role,
+          content: m.images
+            ? [
+                { type: 'text', text: txt },
+                ...m.images.map(img => ({ type: 'image_url', image_url: { url: img } })),
+              ]
+            : txt,
+        };
+      }),
+    ];
 
     await streamChat({
       messages: apiMessages,
@@ -189,40 +238,6 @@ export default function AIChat() {
     });
   };
 
-  const handlePhotoMode = async (mode) => {
-    setShowPhotoModes(false);
-    const stripped = input.replace(/^\/buatfoto\s*/i, '').trim();
-    if (!stripped) {
-      setInput('/buatfoto ');
-      return;
-    }
-    const finalPrompt = `${stripped}, style: ${mode.id}`;
-    const userMsg = { role: 'user', content: `/buatfoto (${mode.label}): ${stripped}` };
-    setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '', generating: true }]);
-    setInput('');
-    setStreaming(true);
-    try {
-      const url = await generateImage(finalPrompt);
-      setMessages(prev => {
-        const arr = [...prev];
-        arr[arr.length - 1] = {
-          role: 'assistant',
-          content: url
-            ? `![generated image](${url.startsWith('data:') || url.startsWith('http') ? url : `data:image/png;base64,${url}`})`
-            : '_Gagal generate image_',
-        };
-        return arr;
-      });
-    } catch (e) {
-      setMessages(prev => {
-        const arr = [...prev];
-        arr[arr.length - 1] = { role: 'assistant', content: `_Error: ${e.message}_` };
-        return arr;
-      });
-    }
-    setStreaming(false);
-  };
-
   const handleFile = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -234,46 +249,56 @@ export default function AIChat() {
 
   return (
     <>
-      <button
-        className="ai-fab"
-        onClick={() => setOpen(o => !o)}
-        title="AI Chat"
-        aria-label="AI Chat"
-      >
-        <img src="/logo.png" alt="" width={28} height={28} style={{ borderRadius: 6 }} />
-      </button>
+      <div className="ai-fab-wrap">
+        {!open && <div className="ai-fab-label">Chat With AI</div>}
+        <button
+          className="ai-fab"
+          onClick={() => setOpen(o => !o)}
+          title="Chat With AI"
+          aria-label="Chat With AI"
+        >
+          <img src="/logo.png" alt="" width={32} height={32} className="haikz-logo-clean" />
+        </button>
+      </div>
 
       {open && (
-        <aside className="ai-panel" role="dialog" aria-label="AI Chat">
+        <aside className="ai-panel" role="dialog" aria-label="Chat With AI">
           <header className="ai-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <StaticLogo size={28} />
+              <HaikzStill size={28} />
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>HaikZTIFY AI</div>
-                <div style={{ fontSize: 11, color: '#b3b3b3' }}>powered by GPT</div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>Chat With AI</div>
+                <div style={{ fontSize: 11, color: '#b3b3b3' }}>HaikzGPT 5.5</div>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} className="ai-close" aria-label="Tutup">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-              </svg>
-            </button>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button onClick={clearChat} className="ai-close" aria-label="Hapus chat" title="Hapus chat">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+              </button>
+              <button onClick={() => setOpen(false)} className="ai-close" aria-label="Tutup">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+              </button>
+            </div>
           </header>
 
           <div ref={scrollRef} className="ai-scroll">
             {messages.length === 0 && (
               <div className="ai-empty">
-                <StaticLogo size={48} />
-                <p style={{ marginTop: 12 }}>Tanya apa aja, atau ketik <code>/buatfoto</code> untuk generate gambar.</p>
+                <HaikzStill size={48} />
+                <p style={{ marginTop: 12 }}>Tanya apa aja, atau ketik <code>/buatfoto &lt;deskripsi&gt;</code> untuk generate gambar.</p>
               </div>
             )}
             {messages.map((m, i) => (
               <div key={i} className={`ai-msg ai-msg-${m.role}`}>
                 {m.role === 'assistant' && (
                   <div className="ai-avatar">
-                    {streaming && i === messages.length - 1
-                      ? <HaikzSpinner size={24} />
-                      : <StaticLogo size={24} />}
+                    {streaming && i === messages.length - 1 && !m.content
+                      ? <HaikzThinking size={24} />
+                      : <HaikzStill size={24} />}
                   </div>
                 )}
                 <div className="ai-bubble">
@@ -292,21 +317,6 @@ export default function AIChat() {
             <div className="ai-pending">
               <img src={pendingImage} alt="" />
               <button onClick={() => setPendingImage(null)}>×</button>
-            </div>
-          )}
-
-          {showPhotoModes && (
-            <div className="ai-modes">
-              <div className="ai-modes-title">Pilih mode foto:</div>
-              <div className="ai-modes-grid">
-                {PHOTO_MODES.map(m => (
-                  <button key={m.id} className="ai-mode-btn" onClick={() => handlePhotoMode(m)}>
-                    <span style={{ fontSize: 18 }}>{m.emoji}</span>
-                    <span>{m.label}</span>
-                  </button>
-                ))}
-                <button className="ai-mode-btn ai-mode-cancel" onClick={() => setShowPhotoModes(false)}>Batal</button>
-              </div>
             </div>
           )}
 
@@ -337,7 +347,7 @@ export default function AIChat() {
             />
             <button onClick={send} disabled={streaming || (!input.trim() && !pendingImage)} className="ai-send">
               {streaming
-                ? <HaikzSpinner size={18} />
+                ? <HaikzThinking size={18} />
                 : (
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
                     <path d="M3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a1 1 0 0 0-1.36 1.18L4 11l13 1-13 1-1.97 6.22a1 1 0 0 0 1.37 1.18z"/>
