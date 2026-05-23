@@ -192,7 +192,13 @@ export default function AIChat() {
         setMessages(prev => {
           const arr = [...prev];
           if (result.success && result.images?.length) {
-            const md = result.images.map(b64 => `![generated](data:image/png;base64,${b64})`).join('\n\n');
+            const md = result.images.map(img => {
+              // Backend returns paths like /v1/buatfoto/file/<id>.png; turn into absolute URLs.
+              const url = img.startsWith('http')
+                ? img
+                : `${AI_BASE}${img.startsWith('/') ? img : '/' + img}`;
+              return `![](${url})`;
+            }).join('\n\n');
             arr[arr.length - 1] = { role: 'assistant', content: md };
           } else {
             arr[arr.length - 1] = {
