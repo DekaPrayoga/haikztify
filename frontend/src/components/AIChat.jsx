@@ -65,7 +65,7 @@ async function streamChat({ messages, onChunk, onDone, onError }) {
         Authorization: `Bearer ${AI_AUTH}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5.5-instant',
         messages,
         stream: true,
       }),
