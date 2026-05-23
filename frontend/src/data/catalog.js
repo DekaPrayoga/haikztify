@@ -314,18 +314,15 @@ Object.entries(MUSIC_CATALOG).forEach(([genre, songs]) => {
 
 export async function resolveTrackAudio(track) {
   if (track.src && (track.src.includes('localhost') || track.src.includes('/api/proxy') || track.src.includes('/api/yt-stream') || track.src.includes(':3001'))) return track;
+  const q = `${track.title} ${track.artist}`;
   try {
-    const q = `${track.title} ${track.artist}`;
     const res = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(q)}`);
     const data = await res.json();
     const tracks = data.tracks || [];
     if (tracks.length > 0) {
-      // Try to find a result that has a Spotify preview URL
       const withPreview = tracks.find(r => r.src);
       const best = withPreview || tracks[0];
-      
       if (best.src) {
-        // Spotify preview available
         return {
           ...track,
           id: best.id,
@@ -334,39 +331,26 @@ export async function resolveTrackAudio(track) {
           cover: track.cover || best.cover,
         };
       }
-
-      // No Spotify preview — fallback to yt-dlp
-      try {
-        const ytRes = await fetch(`${API_BASE}/api/yt-audio?q=${encodeURIComponent(q)}`);
-        if (ytRes.ok) {
-          const ytData = await ytRes.json();
-          if (ytData.url) {
-            return {
-              ...track,
-              id: best.id,
-              src: `${API_BASE}/api/yt-stream?url=${encodeURIComponent(ytData.url)}`,
-              duration: best.duration,
-              cover: track.cover || best.cover,
-            };
-          }
-        }
-      } catch (ytErr) {
-        console.error('yt-dlp fallback failed:', ytErr);
-      }
-
-      // Return with metadata but no audio
-      return {
-        ...track,
-        id: best.id,
-        src: null,
-        duration: best.duration,
-        cover: track.cover || best.cover,
-      };
     }
   } catch (e) {
-    console.error('Failed to resolve track:', e);
+    console.error('Spotify search failed:', e);
   }
-  return track;
+  // Always try yt-dlp regardless of Spotify result (works even when Spotify rate-limits)
+  try {
+    const ytRes = await fetch(`${API_BASE}/api/yt-audio?q=${encodeURIComponent(q)}`);
+    if (ytRes.ok) {
+      const ytData = await ytRes.json();
+      if (ytData.url) {
+        return {
+          ...track,
+          src: `${API_BASE}/api/yt-stream?url=${encodeURIComponent(ytData.url)}`,
+        };
+      }
+    }
+  } catch (ytErr) {
+    console.error('yt-dlp failed:', ytErr);
+  }
+  return { ...track, src: null };
 }
 
 

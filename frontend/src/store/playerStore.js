@@ -87,10 +87,8 @@ const usePlayerStore = create((set, get) => ({
     if (!track.src || (!track.src.includes('localhost') && !track.src.includes('/api/proxy') && !track.src.includes('/api/yt-stream') && !track.src.includes(':3001'))) {
       resolved = await resolveTrackAudio(track);
       if (!resolved.src) {
-        console.warn('No preview available for:', track.title, '- skipping to next');
-        // Still show the track info but mark as not playing, auto-skip
+        // No audio source — show track info as paused, don't auto-skip
         set({ currentTrack: { ...track, cover: resolved.cover || track.cover }, isLoading: false, isPlaying: false });
-        setTimeout(() => get().playNext(), 1500);
         return;
       }
     }
