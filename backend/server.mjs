@@ -638,28 +638,64 @@ app.get('/api/feed/followed-artists', async (req, res) => {
   res.json({ artists: items });
 });
 
+// Curated artist roster (70 total) for Mix + Radio cards.
+const ARTISTS_INDO = [
+  'Tulus', 'Raisa', 'Mahalini', 'Tiara Andini', 'Nadhif Basalamah',
+  'Hindia', 'Rizky Febian', 'Andmesh', 'Yura Yunita', 'Pamungkas',
+  'Reality Club', '.Feast', 'Lyodra', 'Bernadya', 'Sal Priadi',
+  'Juicy Luicy', "Maliq & D'Essentials", 'Sheila on 7', 'Dewa 19', 'NOAH',
+  'Glenn Fredly', 'Anggun', 'Agnes Monica', 'Afgan', 'NIKI',
+  'Rich Brian', 'Bunga Citra Lestari', 'Marion Jola', 'Isyana Sarasvati', 'Iwan Fals',
+  'Slank', 'Padi Reborn', 'Ariel NOAH', 'Fariz RM', 'Vidi Aldiano',
+];
+const ARTISTS_INTL = [
+  'Taylor Swift', 'The Weeknd', 'Drake', 'Billie Eilish', 'Bruno Mars',
+  'Coldplay', 'Olivia Rodrigo', 'Dua Lipa', 'Imagine Dragons', 'Post Malone',
+  'Ed Sheeran', 'Bad Bunny', 'Doja Cat', 'Harry Styles', 'Ariana Grande',
+  'BTS', 'BLACKPINK', 'NewJeans', 'SEVENTEEN', 'TWICE',
+  'Sabrina Carpenter', 'Charli xcx', 'Kendrick Lamar', 'Travis Scott', 'SZA',
+  'Daniel Caesar', 'Frank Ocean', 'Arctic Monkeys', 'Radiohead', 'Tame Impala',
+  'Rex Orange County', 'Clairo', 'The 1975', 'Mitski', 'Mac Miller',
+];
+
 // Assembled "Spotify-style" home feed for the owner. Combines followed-artist
-// data with broad genre searches so the page always has 150+ tracks regardless
-// of the owner's listening history.
+// data with broad genre searches and a 70-artist curated roster so the page
+// always has 300+ tracks regardless of the owner's listening history.
+let homeFeedCache = { data: null, expires_at: 0 };
 app.get('/api/feed/home', async (req, res) => {
+  const now = Date.now();
+  if (homeFeedCache.data && now < homeFeedCache.expires_at) {
+    return res.json(homeFeedCache.data);
+  }
+  // (cache populated at the bottom before send)
   // Each section has multiple queries (Spotify Dev-Mode caps search limit at 10,
   // so we run several queries per section to reach ~25-30 tracks).
   const SECTIONS = [
-    { id: 'topGlobal',  title: 'Tangga Lagu Unggulan Global',
+    { id: 'topGlobal',   title: 'Tangga Lagu Unggulan Global',
       qs: ['genre:pop year:2025-2026', 'genre:pop year:2024', 'top hits 2025'] },
-    { id: 'indonesia',  title: 'Indonesia Terdepan',
+    { id: 'indonesia',   title: 'Indonesia Terdepan',
       qs: ['genre:indonesian-pop year:2024-2026', 'indo pop year:2023-2025', 'tulus OR raisa OR mahalini'] },
-    { id: 'hipHop',     title: 'Hip-Hop Terpanas',
+    { id: 'indonesiaPilihan', title: 'Artis Indonesia Pilihan',
+      qs: ['nadhif basalamah OR juicy luicy OR pamungkas', 'lyodra OR bernadya OR sal priadi', 'hindia OR feast OR reality club'] },
+    { id: 'hipHop',      title: 'Hip-Hop Terpanas',
       qs: ['genre:hip-hop year:2024-2026', 'genre:rap year:2024-2026', 'drake OR kendrick OR travis scott'] },
-    { id: 'rnb',        title: 'R&B & Soul',
+    { id: 'rnb',         title: 'R&B & Soul',
       qs: ['genre:r-n-b year:2023-2026', 'genre:soul year:2020-2026', 'sza OR weeknd OR daniel caesar'] },
-    { id: 'rock',       title: 'Rock & Alternative',
+    { id: 'rock',        title: 'Rock & Alternative',
       qs: ['genre:rock year:2020-2026', 'genre:alt-rock year:2015-2026', 'arctic monkeys OR radiohead OR strokes'] },
-    { id: 'indie',      title: 'Indie Picks',
+    { id: 'indie',       title: 'Indie Picks',
       qs: ['genre:indie year:2020-2026', 'genre:indie-pop year:2020-2026', 'rex orange OR clairo OR boy pablo'] },
-    { id: 'kpop',       title: 'K-Pop Wave',
-      qs: ['genre:k-pop year:2023-2026', 'bts OR newjeans OR blackpink', 'k-pop year:2024-2026'] },
-    { id: 'throwbacks', title: 'Throwbacks 2000-2015',
+    { id: 'kpop',        title: 'K-Pop Wave',
+      qs: ['genre:k-pop year:2023-2026', 'bts OR newjeans OR blackpink', 'seventeen OR twice OR aespa'] },
+    { id: 'galau',       title: 'Lagu Galau',
+      qs: ['genre:indonesian-pop sad', 'sad indo', 'lagu galau 2024'] },
+    { id: 'semangat',    title: 'Lagu Semangat',
+      qs: ['workout 2025', 'hype 2025', 'energetic pop 2024'] },
+    { id: 'chill',       title: 'Acoustic & Chill',
+      qs: ['acoustic chill 2024', 'chill indie 2024', 'lo-fi 2024'] },
+    { id: 'edm',         title: 'EDM & Dance Floor',
+      qs: ['genre:edm year:2024-2026', 'genre:dance year:2024-2026', 'house music 2025'] },
+    { id: 'throwbacks',  title: 'Throwbacks 2000-2015',
       qs: ['genre:pop year:2005-2010', 'genre:pop year:2010-2015', 'classic hits 2000s'] },
   ];
 
@@ -679,12 +715,19 @@ app.get('/api/feed/home', async (req, res) => {
     return { id: s.id, title: s.title, tracks };
   }
 
-  const [ownerData, ...sectionResults] = await Promise.all([
+  async function lookupArtist(name) {
+    const d = await spotifyGet(`/search?q=${encodeURIComponent(name)}&type=artist&limit=1`).catch(() => null);
+    return d?.artists?.items?.[0] || null;
+  }
+
+  const [ownerData, sectionResults, indoArtistResults, intlArtistResults] = await Promise.all([
     Promise.all([
       ownerGet('/me/following?type=artist&limit=20').catch(() => null),
       ownerGet('/me/player/recently-played?limit=20').catch(() => null),
     ]),
-    ...SECTIONS.map(runSection),
+    Promise.all(SECTIONS.map(runSection)),
+    Promise.all(ARTISTS_INDO.map(lookupArtist)),
+    Promise.all(ARTISTS_INTL.map(lookupArtist)),
   ]);
 
   const [followedRaw, recentRaw] = ownerData;
@@ -716,46 +759,27 @@ app.get('/api/feed/home', async (req, res) => {
     .filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i)
     .slice(0, 30);
 
-  // Collect top artists from across all sections (dynamic — most-mentioned popular artists)
-  const artistFreq = new Map();
-  for (const s of sectionResults) {
-    for (const t of s.tracks) {
-      if (!t.artistId) continue;
-      const cur = artistFreq.get(t.artistId);
-      if (cur) cur.count++;
-      else artistFreq.set(t.artistId, { id: t.artistId, name: (t.artist || '').split(',')[0].trim(), count: 1 });
-    }
+  // Build Mix/Radio cards from curated roster (35 indo + 35 intl)
+  const toCard = (a, prefix, subtitle) => ({
+    id: `${prefix}_${a.id}`,
+    artistId: a.id,
+    title: prefix === 'mix' ? `Mix ${a.name}` : a.name,
+    subtitle: subtitle || (a.genres || []).slice(0, 2).join(', ') || 'Lagu mirip',
+    cover: a.images?.[0]?.url || '',
+  });
+  const indoArtists = indoArtistResults.filter(Boolean);
+  const intlArtists = intlArtistResults.filter(Boolean);
+  // Interleave indo + intl so the row alternates
+  const interleavedArtists = [];
+  const maxLen = Math.max(indoArtists.length, intlArtists.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (indoArtists[i]) interleavedArtists.push(indoArtists[i]);
+    if (intlArtists[i]) interleavedArtists.push(intlArtists[i]);
   }
-  const topArtistIds = [...artistFreq.values()]
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 16)
-    .map(a => a.id)
-    .filter(Boolean);
+  const mixCards = interleavedArtists.map(a => toCard(a, 'mix')).filter(c => c.cover);
+  const radioCards = interleavedArtists.slice(0, 24).map(a => toCard(a, 'radio', 'Radio')).filter(c => c.cover);
 
-  const artistDetails = topArtistIds.length
-    ? (await Promise.all(topArtistIds.map(id =>
-        spotifyGet(`/artists/${id}`).catch(() => null)
-      ))).filter(Boolean)
-    : [];
-
-  const mixSeed = artistDetails.length ? artistDetails : followedArtists;
-  const mixCards = mixSeed.map(a => ({
-    id: `mix_${a.id}`,
-    artistId: a.id,
-    title: `Mix ${a.name}`,
-    subtitle: (a.genres || []).slice(0, 2).join(', ') || 'Lagu mirip',
-    cover: a.images?.[0]?.url || a.image || '',
-  })).filter(m => m.cover);
-
-  const radioCards = mixSeed.slice(0, 12).map(a => ({
-    id: `radio_${a.id}`,
-    artistId: a.id,
-    title: a.name,
-    subtitle: 'Radio',
-    cover: a.images?.[0]?.url || a.image || '',
-  })).filter(r => r.cover);
-
-  res.json({
+  const payload = {
     profile: { id: 'owner', name: followedRaw ? 'h' : null },
     sections: {
       startListening,
@@ -763,7 +787,9 @@ app.get('/api/feed/home', async (req, res) => {
       radios: radioCards,
       genreSections: sectionResults,
     },
-  });
+  };
+  homeFeedCache = { data: payload, expires_at: Date.now() + 10 * 60 * 1000 };
+  res.json(payload);
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────
