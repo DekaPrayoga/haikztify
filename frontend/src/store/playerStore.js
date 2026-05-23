@@ -20,8 +20,11 @@ const usePlayerStore = create((set, get) => ({
   playlists: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('playlists') || '[]') : [],
 
   createPlaylist: (name) => {
+    const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `playlist_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     const newPlaylist = {
-      id: `playlist_${Date.now()}`,
+      id,
       name: name || `My Playlist #${get().playlists.length + 1}`,
       tracks: []
     };

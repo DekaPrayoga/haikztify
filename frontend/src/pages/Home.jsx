@@ -50,11 +50,20 @@ function CardSection({ title, items, loading, onCardClick, badge, keyPrefix }) {
   );
 }
 
-function TrackSection({ title, tracks, loading, onTrackClick }) {
-  const [visible, setVisible] = useState(20);
+function TrackSection({ title, tracks, loading, onTrackClick, pageSize = 20, replaceMode = false }) {
+  const [page, setPage] = useState(0); // for replace mode
+  const [visible, setVisible] = useState(pageSize); // for append mode
   if (!loading && tracks.length === 0) return null;
-  const shown = tracks.slice(0, visible);
-  const hasMore = tracks.length > visible;
+  const shown = replaceMode
+    ? tracks.slice(page * pageSize, (page + 1) * pageSize)
+    : tracks.slice(0, visible);
+  const hasMore = replaceMode
+    ? (page + 1) * pageSize < tracks.length
+    : tracks.length > visible;
+  const handleMore = () => {
+    if (replaceMode) setPage(p => p + 1);
+    else setVisible(v => v + pageSize);
+  };
   return (
     <section className="home-section">
       <div className="section-heading-wrap">
@@ -66,8 +75,8 @@ function TrackSection({ title, tracks, loading, onTrackClick }) {
           <>
             <div className="track-list">
               {shown.map((t, i) => (
-                <div key={`${t.id}_${i}`} className="track-row" onClick={() => onTrackClick(t, tracks)}>
-                  <span className="track-idx">{i + 1}</span>
+                <div key={`${t.id}_${i}`} className="track-row" onClick={() => onTrackClick(t, shown)}>
+                  <span className="track-idx">{i + 1 + (replaceMode ? page * pageSize : 0)}</span>
                   <img className="track-cover" src={t.cover} alt="" loading="lazy"
                     onError={(e) => { e.target.src = ''; e.target.style.background = '#282828'; }} />
                   <div className="track-info">
@@ -83,7 +92,7 @@ function TrackSection({ title, tracks, loading, onTrackClick }) {
             </div>
             {hasMore && (
               <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                <button onClick={() => setVisible(v => v + 20)} className="load-more-btn">Load more</button>
+                <button onClick={handleMore} className="load-more-btn">Load more</button>
               </div>
             )}
           </>
@@ -139,6 +148,25 @@ export default function Home() {
   const radios = feed?.radios || [];
   const genreSections = feed?.genreSections || [];
 
+  // Build the "Untukmu" mixed pool: dedupe + shuffle once across all genre tracks
+  const [shuffledPool, setShuffledPool] = useState([]);
+  useEffect(() => {
+    if (genreSections.length === 0) return;
+    const seen = new Set();
+    const flat = [];
+    for (const s of genreSections) {
+      for (const t of s.tracks) {
+        if (!seen.has(t.id)) { seen.add(t.id); flat.push(t); }
+      }
+    }
+    // Fisher-Yates shuffle (stable per page load)
+    for (let i = flat.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [flat[i], flat[j]] = [flat[j], flat[i]];
+    }
+    setShuffledPool(flat);
+  }, [genreSections]);
+
   return (
     <div className="page-home">
       <h2 className="section-heading greeting">{greeting}</h2>
@@ -162,6 +190,10 @@ export default function Home() {
 
       <TrackSection title="Mulai mendengarkan"
         tracks={startListening} loading={loading} onTrackClick={playTrack} />
+
+      <TrackSection title="Untukmu"
+        tracks={shuffledPool} loading={loading} onTrackClick={playTrack}
+        pageSize={50} replaceMode={true} />
 
       <CardSection title="Untuk membantu kamu mulai mendengarkan"
         items={mixes} loading={loading}
