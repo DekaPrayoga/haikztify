@@ -32,7 +32,7 @@ function MobileHeader() {
   const navigate = useNavigate();
   return (
     <header className="mobile-header" onClick={() => navigate('/')}>
-      <svg viewBox="0 0 24 24" width="28" height="28" fill="#1DB954"><circle cx="12" cy="12" r="12"/></svg>
+      <img src="/logo.png" alt="HaikZTIFY" width="32" height="32" style={{ borderRadius: 6 }} />
       <span className="mobile-header-title">HaikZTIFY</span>
     </header>
   );

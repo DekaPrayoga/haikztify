@@ -192,7 +192,7 @@ img { display: block; }
 .mobile-bottom-nav { display: none; }
 
 @media (max-width: 900px) {
-  .app-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto auto; }
+  .app-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .sidebar { display: none; }
   .main-view { grid-column: 1; grid-row: 2; }
   .quick-grid { grid-template-columns: repeat(2, 1fr); }
@@ -202,7 +202,7 @@ img { display: block; }
   .detail-name { font-size: 28px; }
   .detail-cover { width: 140px; height: 140px; }
   .detail-header { margin: -16px -16px 0; padding: 24px 16px 20px; gap: 16px; }
-  .content-scroll { padding: 16px 16px 80px; }
+  .content-scroll { padding: 16px 16px 200px; }
 
   /* Mobile header with logo */
   .mobile-header {
@@ -224,8 +224,16 @@ img { display: block; }
     color: var(--text);
   }
 
-  /* Compact player for mobile */
-  .player-bar { padding: 6px 12px; flex-wrap: wrap; grid-row: 3; }
+  /* Compact player for mobile — fixed at bottom above nav */
+  .player-bar {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: 56px;
+    padding: 6px 12px;
+    flex-wrap: wrap;
+    z-index: 100;
+    background: var(--bg);
+  }
   .player-left { min-width: unset; gap: 8px; flex: 1; order: 1; }
   .player-cover { width: 40px; height: 40px; }
   .player-center { max-width: 100%; flex: unset; width: 100%; order: 3; margin-top: 8px; }
@@ -234,16 +242,18 @@ img { display: block; }
   .volume-wrap { width: 60px; }
   .progress-time { display: block; font-size: 10px; }
 
-  /* Mobile bottom navigation */
+  /* Mobile bottom navigation — fixed at very bottom */
   .mobile-bottom-nav {
     display: flex;
-    grid-column: 1 / -1;
-    grid-row: 4;
+    position: fixed;
+    left: 0; right: 0;
+    bottom: 0;
+    height: 56px;
     background: var(--bg);
     border-top: 1px solid rgba(255,255,255,.08);
     justify-content: space-around;
     align-items: center;
-    padding: 8px 0 env(safe-area-inset-bottom, 8px);
+    padding: 0 0 env(safe-area-inset-bottom, 0);
     z-index: 101;
   }
   .mobile-nav-btn {

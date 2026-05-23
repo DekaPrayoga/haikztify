@@ -51,7 +51,10 @@ function CardSection({ title, items, loading, onCardClick, badge, keyPrefix }) {
 }
 
 function TrackSection({ title, tracks, loading, onTrackClick }) {
+  const [visible, setVisible] = useState(20);
   if (!loading && tracks.length === 0) return null;
+  const shown = tracks.slice(0, visible);
+  const hasMore = tracks.length > visible;
   return (
     <section className="home-section">
       <div className="section-heading-wrap">
@@ -60,23 +63,30 @@ function TrackSection({ title, tracks, loading, onTrackClick }) {
       {loading && tracks.length === 0
         ? <div className="loader"><div className="spinner" /></div>
         : (
-          <div className="track-list">
-            {tracks.map((t, i) => (
-              <div key={`${t.id}_${i}`} className="track-row" onClick={() => onTrackClick(t, tracks)}>
-                <span className="track-idx">{i + 1}</span>
-                <img className="track-cover" src={t.cover} alt="" loading="lazy"
-                  onError={(e) => { e.target.src = ''; e.target.style.background = '#282828'; }} />
-                <div className="track-info">
-                  <span className="track-name">{t.title}</span>
-                  <span className="track-artist-sub">{t.artist}</span>
+          <>
+            <div className="track-list">
+              {shown.map((t, i) => (
+                <div key={`${t.id}_${i}`} className="track-row" onClick={() => onTrackClick(t, tracks)}>
+                  <span className="track-idx">{i + 1}</span>
+                  <img className="track-cover" src={t.cover} alt="" loading="lazy"
+                    onError={(e) => { e.target.src = ''; e.target.style.background = '#282828'; }} />
+                  <div className="track-info">
+                    <span className="track-name">{t.title}</span>
+                    <span className="track-artist-sub">{t.artist}</span>
+                  </div>
+                  <span className="track-album hide-mobile">{t.album}</span>
+                  <span className="track-dur">
+                    {t.duration ? `${Math.floor(t.duration/60)}:${String(t.duration%60).padStart(2,'0')}` : '--:--'}
+                  </span>
                 </div>
-                <span className="track-album hide-mobile">{t.album}</span>
-                <span className="track-dur">
-                  {t.duration ? `${Math.floor(t.duration/60)}:${String(t.duration%60).padStart(2,'0')}` : '--:--'}
-                </span>
+              ))}
+            </div>
+            {hasMore && (
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <button onClick={() => setVisible(v => v + 20)} className="load-more-btn">Load more</button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )
       }
     </section>
