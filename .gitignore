@@ -56,6 +56,13 @@ ecosystem.config.local.cjs
 claw-code/
 .antigravitycli/
 
+# Claude Code local settings (may contain secrets/tokens)
+.claude/
+.claw-code/
+
+# Deploy guide (kept local, not in repo)
+DEPLOY.md
+
 # Misc
 *.tgz
 .cache/
