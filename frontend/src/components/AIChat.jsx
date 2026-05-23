@@ -79,6 +79,22 @@ function MessageContent({ text }) {
   );
 }
 
+async function generateImage(prompt) {
+  const res = await fetch(`${AI_BASE}/v1/buatfoto`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${AI_AUTH}`,
+    },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status} ${t.slice(0, 200)}`);
+  }
+  return await res.json();
+}
+
 async function streamChat({ messages, onChunk, onDone, onError, historyDisabled = true }) {
   try {
     const res = await fetch(`${AI_BASE}/v1/chat/completions`, {
@@ -158,15 +174,46 @@ export default function AIChat() {
     if (!raw && !pendingImage) return;
     if (streaming) return;
 
-    // Transform /buatfoto X → "Create an image of: X" for the AI,
-    // but keep the original /buatfoto X in the user's bubble.
-    let displayText = raw;
-    let apiText = raw;
+    // /buatfoto <prompt> → dedicated image-gen endpoint (polls until ready)
     const photoMatch = raw.match(/^\/buatfoto\s+(.+)$/i);
     if (photoMatch) {
-      apiText = `Create an image of: ${photoMatch[1].trim()}`;
-    } else if (raw.toLowerCase() === '/buatfoto') {
-      // Just the command with no args — hint usage
+      const photoPrompt = photoMatch[1].trim();
+      const userMsg = { role: 'user', content: raw };
+      const placeholder = {
+        role: 'assistant',
+        content: '_Memproses gambar… ini bisa makan waktu sampai 3 menit, sabar ya._',
+        generating: true,
+      };
+      setMessages(prev => [...prev, userMsg, placeholder]);
+      setInput('');
+      setStreaming(true);
+      try {
+        const result = await generateImage(photoPrompt);
+        setMessages(prev => {
+          const arr = [...prev];
+          if (result.success && result.images?.length) {
+            const md = result.images.map(b64 => `![generated](data:image/png;base64,${b64})`).join('\n\n');
+            arr[arr.length - 1] = { role: 'assistant', content: md };
+          } else {
+            arr[arr.length - 1] = {
+              role: 'assistant',
+              content: `_Gagal generate gambar: ${result.error || 'unknown'}_`,
+            };
+          }
+          return arr;
+        });
+      } catch (e) {
+        setMessages(prev => {
+          const arr = [...prev];
+          arr[arr.length - 1] = { role: 'assistant', content: `_Error: ${e.message}_` };
+          return arr;
+        });
+      }
+      setStreaming(false);
+      return;
+    }
+
+    if (raw.toLowerCase() === '/buatfoto') {
       setMessages(prev => [...prev,
         { role: 'user', content: raw },
         { role: 'assistant', content: 'Format: `/buatfoto <deskripsi>` — contoh: `/buatfoto anime girl 3d`' },
@@ -177,17 +224,10 @@ export default function AIChat() {
 
     const userDisplay = {
       role: 'user',
-      content: displayText,
+      content: raw,
       ...(pendingImage ? { images: [pendingImage] } : {}),
     };
-    // Keep "api version" of the message so we can rebuild the history send
-    const userForApi = {
-      role: 'user',
-      content: apiText,
-      ...(pendingImage ? { images: [pendingImage] } : {}),
-      _apiContent: apiText,
-    };
-    const next = [...messages, { ...userDisplay, _apiContent: apiText }];
+    const next = [...messages, { ...userDisplay, _apiContent: raw }];
     setMessages(next);
     setInput('');
     setPendingImage(null);
@@ -214,9 +254,7 @@ export default function AIChat() {
 
     await streamChat({
       messages: apiMessages,
-      // /buatfoto needs history_disabled:false so ChatGPT runs in
-      // permanent (non-temporary) mode where image generation works.
-      historyDisabled: !photoMatch,
+      historyDisabled: true,
       onChunk: (delta) => {
         setMessages(prev => {
           const arr = [...prev];
