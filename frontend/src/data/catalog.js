@@ -297,9 +297,10 @@ export const GENRES = [
   }
 ];
 
-const API_BASE = typeof window !== 'undefined'
-  ? `${window.location.protocol}//${window.location.hostname}:3001`
-  : 'http://localhost:3001';
+const API_BASE = import.meta.env.VITE_API_URL
+  || (typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:3001`
+    : 'http://localhost:3001');
 
 export const ALL_SONGS = [];
 Object.entries(MUSIC_CATALOG).forEach(([genre, songs]) => {
