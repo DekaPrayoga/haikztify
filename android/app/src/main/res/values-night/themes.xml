@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Haikztify" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/spotify_green</item>
+        <item name="colorPrimaryDark">@color/spotify_green_dark</item>
+        <item name="colorAccent">@color/spotify_green</item>
+        <item name="android:windowBackground">@color/spotify_black</item>
+        <item name="android:statusBarColor">@color/spotify_black</item>
+        <item name="android:navigationBarColor">@color/spotify_black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+</resources>

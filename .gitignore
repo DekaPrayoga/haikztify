@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Env files (secrets)
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+!**/.env.example
+
+# Logs
+*.log
+logs/
+**/logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+**/dist/
+**/build/
+.vite/
+
+# Android build artifacts
+**/.gradle/
+**/local.properties
+**/captures/
+**/.externalNativeBuild/
+**/.cxx/
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# Editor / IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Process managers / runtime
+ecosystem.config.local.cjs
+.pm2/
+
+# Separate / unrelated to this project
+claw-code/
+.antigravitycli/
+
+# Misc
+*.tgz
+.cache/
+coverage/
