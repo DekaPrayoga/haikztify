@@ -11,6 +11,7 @@ import SpotifyPlaylistPage from './pages/SpotifyPlaylistPage';
 import LoginPage from './pages/LoginPage';
 import CallbackPage from './pages/CallbackPage';
 import Library from './pages/Library';
+import AIChat from './components/AIChat';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useEffect } from 'react';
 import usePlayerStore from './store/playerStore';
@@ -87,6 +88,7 @@ function AppLayout() {
       </main>
       <Player />
       <MobileNav />
+      <AIChat />
       <KeyboardShortcuts />
     </div>
   );
