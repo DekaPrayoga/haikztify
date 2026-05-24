@@ -188,6 +188,16 @@ if (audio) {
     usePlayerStore.getState().playNext();
   });
   audio.addEventListener('error', () => setTimeout(() => usePlayerStore.getState().playNext(), 1500));
+
+  // Native notification controls (Android media session buttons)
+  window.addEventListener('haikztify-prev', () => {
+    usePlayerStore.getState().playPrev();
+  });
+  window.addEventListener('haikztify-shuffle', (e) => {
+    const store = usePlayerStore.getState();
+    const enabled = e.detail?.enabled;
+    if (enabled !== undefined && enabled !== store.shuffle) store.toggleShuffle();
+  });
 }
 
 export default usePlayerStore;

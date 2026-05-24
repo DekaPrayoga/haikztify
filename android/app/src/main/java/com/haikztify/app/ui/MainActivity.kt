@@ -68,6 +68,12 @@ class MainActivity : AppCompatActivity() {
                 audioBridge?.notifyPlayStateChanged(isPlaying)
                 if (isPlaying) startPositionUpdates() else stopPositionUpdates()
             }
+            audioService?.onPreviousTrack = {
+                audioBridge?.notifyPrevTrack()
+            }
+            audioService?.onShuffleToggled = { enabled ->
+                audioBridge?.notifyShuffle(enabled)
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {

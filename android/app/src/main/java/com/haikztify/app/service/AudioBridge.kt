@@ -115,4 +115,22 @@ class AudioBridge(
             )
         }
     }
+
+    // Notification "prev" button → tell JS to play previous track
+    fun notifyPrevTrack() {
+        mainHandler.post {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('haikztify-prev'))", null
+            )
+        }
+    }
+
+    // Notification shuffle toggle → sync with JS player shuffle state
+    fun notifyShuffle(enabled: Boolean) {
+        mainHandler.post {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('haikztify-shuffle',{detail:{enabled:$enabled}}))", null
+            )
+        }
+    }
 }
