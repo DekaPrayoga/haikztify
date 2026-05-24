@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, API_BASE } from '../context/AuthContext';
 
 export default function CallbackPage() {
-  const { handleCallback, saveTokens } = useAuth();
+  const { saveTokens } = useAuth();
   const navigate = useNavigate();
   const [status, setStatus] = useState('Logging you in...');
 
@@ -17,39 +17,29 @@ export default function CallbackPage() {
       return;
     }
 
-    // New flow: server redirects back with tokens directly
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-    const expiresIn = parseInt(params.get('expires_in') || '3600');
-
-    if (accessToken) {
-      saveTokens(accessToken, refreshToken, expiresIn);
-      // Fetch user profile then go home
-      fetch(`${API_BASE}/api/me`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+    // Exchange one-time code for real tokens (tokens never touch the URL)
+    const code = params.get('code');
+    if (code) {
+      fetch(`${API_BASE}/auth/token-exchange`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
       })
-        .then(r => r.ok ? r.json() : null)
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(tokens => {
+          saveTokens(tokens.access_token, tokens.refresh_token, tokens.expires_in);
+          return fetch(`${API_BASE}/api/me`, {
+            headers: { Authorization: `Bearer ${tokens.access_token}` },
+          }).then(r => r.ok ? r.json() : null);
+        })
         .then(user => {
-          if (user) {
-            // Store user in sessionStorage so AuthContext picks it up on next render
-            sessionStorage.setItem('sp_user', JSON.stringify(user));
-          }
+          if (user) sessionStorage.setItem('sp_user', JSON.stringify(user));
           navigate('/');
         })
-        .catch(() => navigate('/'));
-      return;
-    }
-
-    // Legacy: code-based flow (fallback)
-    const code = params.get('code');
-    if (code && code !== '_done_') {
-      handleCallback(code).then(ok => {
-        if (ok) navigate('/');
-        else {
+        .catch(() => {
           setStatus('Login gagal. Coba lagi.');
           setTimeout(() => navigate('/login'), 2000);
-        }
-      });
+        });
       return;
     }
 

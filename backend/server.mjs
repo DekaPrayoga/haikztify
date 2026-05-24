@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import crypto from 'crypto';
 
 const app = express();
 
@@ -444,6 +445,9 @@ app.get('/auth/login', (req, res) => {
   res.redirect(url.toString());
 });
 
+// Short-lived token store for OAuth — code→tokens, expire 60s
+const pendingTokens = new Map();
+
 app.get('/auth/callback', async (req, res) => {
   const { code, error } = req.query;
   if (error || !code) return res.status(400).json({ error: error || 'No code' });
@@ -456,17 +460,31 @@ app.get('/auth/callback', async (req, res) => {
     });
     const data = await r.json();
     if (!r.ok || !data.access_token) return res.status(400).json({ error: 'Token exchange failed' });
-    const frontendBase = process.env.FRONTEND_URL || 'http://127.0.0.1:5173';
-    const params = new URLSearchParams({
-      code: '_done_',
+
+    // Store tokens behind a one-time code — never put real tokens in URL
+    const otc = crypto.randomUUID();
+    pendingTokens.set(otc, {
       access_token: data.access_token,
       refresh_token: data.refresh_token || '',
-      expires_in: String(data.expires_in || 3600),
+      expires_in: data.expires_in || 3600,
     });
-    res.redirect(`${frontendBase}/callback?${params}`);
+    setTimeout(() => pendingTokens.delete(otc), 60_000); // auto-expire 60s
+
+    const frontendBase = process.env.FRONTEND_URL || 'http://127.0.0.1:5173';
+    res.redirect(`${frontendBase}/callback?code=${otc}`);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Frontend POSTs the one-time code here to get the real tokens
+app.post('/auth/token-exchange', express.json(), (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'missing code' });
+  const tokens = pendingTokens.get(code);
+  if (!tokens) return res.status(400).json({ error: 'invalid or expired code' });
+  pendingTokens.delete(code); // one-time use
+  res.json(tokens);
 });
 
 app.get('/auth/refresh', async (req, res) => {
@@ -816,6 +834,64 @@ app.get('/apk/download', (req, res) => {
   res.download(apkPath, 'HaikzTify.apk', (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: 'APK not found' });
   });
+});
+
+// ── AI Proxy — token hidden on backend, frontend authenticates via signed ts ──
+const AI_UPSTREAM = 'https://api.haikz.me/ai';
+
+function verifyAiSig(ts, sig) {
+  const secret = process.env.PROXY_SECRET || '';
+  if (!secret || !ts || !sig) return false;
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - parseInt(ts, 10)) > 120) return false; // 2-min window
+  const expected = crypto.createHash('sha1').update(`${ts}${secret}`).digest('hex');
+  return expected === sig;
+}
+
+app.post('/api/ai/chat', express.json(), async (req, res) => {
+  if (!verifyAiSig(req.headers['x-ts'], req.headers['x-sig']))
+    return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const upstream = await fetch(`${AI_UPSTREAM}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AI_AUTH_TOKEN}` },
+      body: JSON.stringify(req.body),
+    });
+    res.status(upstream.status);
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'text/event-stream');
+    const reader = upstream.body.getReader();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      res.write(Buffer.from(value));
+    }
+    res.end();
+  } catch (e) {
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+    else res.end();
+  }
+});
+
+app.post('/api/ai/image', express.json(), async (req, res) => {
+  if (!verifyAiSig(req.headers['x-ts'], req.headers['x-sig']))
+    return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const upstream = await fetch(`${AI_UPSTREAM}/v1/buatfoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AI_AUTH_TOKEN}` },
+      body: JSON.stringify(req.body),
+    });
+    const data = await upstream.json();
+    // Make image URLs absolute so frontend doesn't need to know AI_UPSTREAM
+    if (Array.isArray(data.images)) {
+      data.images = data.images.map(img =>
+        img.startsWith('http') ? img : `${AI_UPSTREAM}${img.startsWith('/') ? img : '/' + img}`
+      );
+    }
+    res.status(upstream.status).json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────

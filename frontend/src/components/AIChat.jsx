@@ -5,9 +5,16 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 
-const AI_BASE = 'https://api.haikz.me/ai';
-const AI_AUTH = 'haikz-ai-2026';
-// Text chat routes through chat2api (avoids browser CORS block from freemodel.dev).
+const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:3001`;
+const _PS = import.meta.env.VITE_PROXY_SECRET || '';
+
+// Sign request: sha1(ts + PROXY_SECRET) — keeps AI token hidden on backend
+async function signRequest() {
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(ts + _PS));
+  const sig = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return { 'X-Ts': ts, 'X-Sig': sig };
+}
 const STORAGE_KEY = 'haikz_ai_chat_v1';
 const MAX_HISTORY = 20; // last N user+assistant messages sent to AI
 
@@ -32,7 +39,7 @@ Aturan ketat (tidak boleh dilanggar):
 function HaikzThinking({ size = 28 }) {
   return (
     <img
-      src="/logo.png"
+      src="/logo.svg"
       alt=""
       width={size}
       height={size}
@@ -45,7 +52,7 @@ function HaikzThinking({ size = 28 }) {
 function HaikzStill({ size = 24 }) {
   return (
     <img
-      src="/logo.png"
+      src="/logo.svg"
       alt=""
       width={size}
       height={size}
@@ -81,12 +88,10 @@ function MessageContent({ text }) {
 }
 
 async function generateImage(prompt) {
-  const res = await fetch(`${AI_BASE}/v1/buatfoto`, {
+  const sigHeaders = await signRequest();
+  const res = await fetch(`${API_BASE}/api/ai/image`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${AI_AUTH}`,
-    },
+    headers: { 'Content-Type': 'application/json', ...sigHeaders },
     body: JSON.stringify({ prompt }),
   });
   if (!res.ok) {
@@ -98,17 +103,11 @@ async function generateImage(prompt) {
 
 async function streamChat({ messages, onChunk, onDone, onError }) {
   try {
-    const res = await fetch(`${AI_BASE}/v1/chat/completions`, {
+    const sigHeaders = await signRequest();
+    const res = await fetch(`${API_BASE}/api/ai/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${AI_AUTH}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-5.5-instant',
-        messages,
-        stream: true,
-      }),
+      headers: { 'Content-Type': 'application/json', ...sigHeaders },
+      body: JSON.stringify({ model: 'gpt-5.5-instant', messages, stream: true }),
     });
     if (!res.ok || !res.body) {
       const t = await res.text().catch(() => '');
@@ -192,13 +191,7 @@ export default function AIChat() {
         setMessages(prev => {
           const arr = [...prev];
           if (result.success && result.images?.length) {
-            const md = result.images.map(img => {
-              // Backend returns paths like /v1/buatfoto/file/<id>.png; turn into absolute URLs.
-              const url = img.startsWith('http')
-                ? img
-                : `${AI_BASE}${img.startsWith('/') ? img : '/' + img}`;
-              return `![](${url})`;
-            }).join('\n\n');
+            const md = result.images.map(img => `![](${img})`).join('\n\n');
             arr[arr.length - 1] = { role: 'assistant', content: md };
           } else {
             arr[arr.length - 1] = {
@@ -304,7 +297,7 @@ export default function AIChat() {
           title="Chat With AI"
           aria-label="Chat With AI"
         >
-          <img src="/logo.png" alt="" width={32} height={32} className="haikz-logo-clean" />
+          <img src="/logo.svg" alt="" width={32} height={32} className="haikz-logo-clean" />
         </button>
       </div>
 
