@@ -629,6 +629,12 @@ async function ownerGet(path) {
   return userSpotifyGet(path, tok);
 }
 
+app.get('/api/owner-token', async (req, res) => {
+  const token = await getOwnerToken();
+  if (!token) return res.status(503).json({ error: 'Owner token unavailable' });
+  res.json({ access_token: token });
+});
+
 app.get('/api/feed/me', async (req, res) => {
   const data = await ownerGet('/me');
   if (!data) return res.status(503).json({ error: 'Owner feed unavailable' });

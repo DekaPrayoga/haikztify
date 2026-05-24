@@ -118,18 +118,19 @@ const usePlayerStore = create((set, get) => ({
     const myRequestId = ++playRequestId;
     set({ currentTrack: track, currentIndex: idx >= 0 ? idx : 0, queue: q, isLoading: true, progress: 0, currentTime: 0, duration: 0 });
 
-    // Use Spotify SDK if ready (Premium user logged in)
+    // Use Spotify SDK if ready (owner token, no login needed)
     if (state.spotifyReady && sdkDeviceId && track.spotifyId) {
       try {
-        const { getToken } = await import('../context/AuthContext').then(m => {
-          // getToken is not directly importable — use window helper set by AuthProvider
-          return { getToken: window.__getSpotifyToken };
-        });
-        const token = getToken ? await getToken() : null;
-        if (token) {
+        const token = window.__getSpotifyToken ? await window.__getSpotifyToken() : null;
+        // fallback: fetch owner token directly
+        const finalToken = token || await fetch(
+          (import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:3001`) + '/api/owner-token'
+        ).then(r => r.ok ? r.json().then(d => d.access_token) : null).catch(() => null);
+
+        if (finalToken) {
           await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${sdkDeviceId}`, {
             method: 'PUT',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            headers: { Authorization: `Bearer ${finalToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ uris: [`spotify:track:${track.spotifyId}`] }),
           });
           if (playRequestId !== myRequestId) return;

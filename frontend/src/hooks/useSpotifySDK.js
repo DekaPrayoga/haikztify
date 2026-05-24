@@ -1,21 +1,29 @@
 import { useEffect, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
 import usePlayerStore from '../store/playerStore';
+import { API_BASE } from '../context/AuthContext';
 
 export default function useSpotifySDK() {
-  const { isLoggedIn, getToken } = useAuth();
   const playerRef = useRef(null);
   const mountedRef = useRef(false);
 
   useEffect(() => {
-    if (!isLoggedIn || mountedRef.current) return;
+    if (mountedRef.current) return;
     mountedRef.current = true;
+
+    const getOwnerToken = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/owner-token`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.access_token || null;
+      } catch { return null; }
+    };
 
     const init = () => {
       const player = new window.Spotify.Player({
         name: 'HaikZTIFY',
         getOAuthToken: async (cb) => {
-          const token = await getToken();
+          const token = await getOwnerToken();
           if (token) cb(token);
         },
         volume: usePlayerStore.getState().volume,
@@ -64,5 +72,5 @@ export default function useSpotifySDK() {
       mountedRef.current = false;
       usePlayerStore.getState().setSpotifyReady(false, null, null);
     };
-  }, [isLoggedIn]);
+  }, []);
 }
