@@ -3,8 +3,12 @@ import { ALL_SONGS, resolveTrackAudio, prefetchTrackAudio } from '../data/catalo
 
 const audio = typeof window !== 'undefined' ? new Audio() : null;
 
+// Monotonically increasing counter — stale resolves bail out when ID changes
+let playRequestId = 0;
+
 const usePlayerStore = create((set, get) => ({
   queue: [...ALL_SONGS],
+  originalQueue: [...ALL_SONGS],
   currentIndex: -1,
   currentTrack: null,
   isPlaying: false,
@@ -80,29 +84,31 @@ const usePlayerStore = create((set, get) => ({
     const idx = q.findIndex(s => s.id === track.id);
     if (!audio) return;
 
+    // BUG FIX #1: race condition — increment ID so any stale resolve aborts
+    const myRequestId = ++playRequestId;
+
     set({ currentTrack: track, currentIndex: idx >= 0 ? idx : 0, queue: q, isLoading: true });
 
-    // Resolve audio URL if not present
     let resolved = track;
     if (!track.src || (!track.src.includes('localhost') && !track.src.includes('/api/proxy') && !track.src.includes('/api/yt-stream') && !track.src.includes(':3001'))) {
       resolved = await resolveTrackAudio(track);
+      if (playRequestId !== myRequestId) return; // stale — user clicked another track
       if (!resolved.src) {
-        // No audio source — show track info as paused, don't auto-skip
         set({ currentTrack: { ...track, cover: resolved.cover || track.cover }, isLoading: false, isPlaying: false });
         return;
       }
     }
 
-    // Set metadata for native Android audio bridge (notification title/artist/cover)
-    if (typeof window !== "undefined" && window.__setTrackMeta) {
-      window.__setTrackMeta(track.title, track.artist, resolved.cover || track.cover || "");
+    if (playRequestId !== myRequestId) return;
+
+    if (typeof window !== 'undefined' && window.__setTrackMeta) {
+      window.__setTrackMeta(track.title, track.artist, resolved.cover || track.cover || '');
     }
     audio.src = resolved.src;
     audio.volume = state.isMuted ? 0 : state.volume;
-    audio.play().catch(() => {});
+    audio.play().catch((e) => console.warn('audio.play failed:', e));
     set({ currentTrack: { ...track, src: resolved.src, duration: resolved.duration, cover: resolved.cover || track.cover }, isPlaying: true, isLoading: false });
 
-    // Prefetch next track in background so it's ready instantly
     const nextIdx = (idx >= 0 ? idx : 0) + 1;
     if (nextIdx < q.length) prefetchTrackAudio(q[nextIdx]);
   },
@@ -113,7 +119,7 @@ const usePlayerStore = create((set, get) => ({
     await get().playTrack(q[index], q);
   },
 
-  setQueue: (songs) => set({ queue: songs }),
+  setQueue: (songs) => set({ queue: songs, originalQueue: songs }),
 
   togglePlay: () => {
     const { isPlaying, currentIndex } = get();
@@ -141,17 +147,19 @@ const usePlayerStore = create((set, get) => ({
     get().playIndex(prev);
   },
 
+  // BUG FIX #2: shuffle OFF restores originalQueue, bukan ALL_SONGS
   toggleShuffle: () => {
-    const { shuffle, queue } = get();
+    const { shuffle, queue, originalQueue } = get();
     if (!shuffle) {
+      const original = [...queue];
       const shuffled = [...queue];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-      set({ shuffle: true, queue: shuffled });
+      set({ shuffle: true, queue: shuffled, originalQueue: original });
     } else {
-      set({ shuffle: false, queue: [...ALL_SONGS] });
+      set({ shuffle: false, queue: [...originalQueue] });
     }
   },
 
@@ -171,7 +179,6 @@ const usePlayerStore = create((set, get) => ({
 
   seekTo: (pct) => {
     if (!audio) return;
-    // If duration not ready yet, wait for it then seek
     if (!audio.duration || !isFinite(audio.duration)) {
       const onReady = () => {
         audio.currentTime = (pct / 100) * audio.duration;
@@ -184,8 +191,6 @@ const usePlayerStore = create((set, get) => ({
     }
     audio.currentTime = (pct / 100) * audio.duration;
   },
-
-
 
   _updateTime: () => {
     if (!audio) return;
@@ -204,7 +209,6 @@ if (audio) {
   });
   audio.addEventListener('error', () => setTimeout(() => usePlayerStore.getState().playNext(), 1500));
 
-  // Native notification controls (Android media session buttons)
   window.addEventListener('haikztify-prev', () => {
     usePlayerStore.getState().playPrev();
   });

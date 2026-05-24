@@ -3,7 +3,7 @@ import usePlayerStore from '../store/playerStore';
 
 export default function Player() {
   const {
-    currentTrack, isPlaying, togglePlay, playNext, playPrev,
+    currentTrack, isPlaying, isLoading, togglePlay, playNext, playPrev,
     shuffle, toggleShuffle, repeat, toggleRepeat,
     volume, isMuted, setVolume, toggleMute,
     progress, currentTime, duration, seekTo,
@@ -107,7 +107,9 @@ export default function Player() {
             <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.575a.7.7 0 0 1-1.05.607L4 9.149V14.3a.7.7 0 0 1-.7.7H1.7a.7.7 0 0 1-.7-.7V1.7a.7.7 0 0 1 .7-.7h1.6z"/></svg>
           </button>
           <button className="play-btn-lg" onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'}>
-            {isPlaying ? (
+            {isLoading ? (
+              <svg viewBox="0 0 24 24" fill="black" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z" opacity=".3"/><path d="M12 2a10 10 0 0 1 10 10h-2a8 8 0 0 0-8-8z"/></svg>
+            ) : isPlaying ? (
               <svg viewBox="0 0 24 24" fill="black"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             ) : (
               <svg viewBox="0 0 24 24" fill="black"><path d="M8 5.14v14l11-7-11-7z"/></svg>

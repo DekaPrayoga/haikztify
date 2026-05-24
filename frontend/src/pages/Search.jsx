@@ -197,10 +197,15 @@ export default function Search() {
   const loadMoreOnline = useCallback(async () => {
     if (loadingMore || !query) return;
     setLoadingMore(true);
-    const result = await searchTracks(query, 10, onlineOffset);
-    setOnlineResults(prev => [...prev, ...result.tracks]);
-    setOnlineOffset(prev => prev + result.tracks.length);
-    setLoadingMore(false);
+    try {
+      const result = await searchTracks(query, 10, onlineOffset);
+      setOnlineResults(prev => [...prev, ...result.tracks]);
+      setOnlineOffset(prev => prev + result.tracks.length);
+    } catch (e) {
+      console.warn('loadMoreOnline failed:', e);
+    } finally {
+      setLoadingMore(false);
+    }
   }, [query, onlineOffset, loadingMore]);
 
   // Typing → local catalog search only (instant, no API call)

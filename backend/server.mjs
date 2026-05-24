@@ -26,20 +26,26 @@ const SPOTIFY_API = 'https://api.spotify.com/v1';
 
 let token = null;
 let tokenExpiresAt = 0;
+let tokenPromise = null;
 
 async function getToken() {
   if (token && Date.now() < tokenExpiresAt - 60000) return token;
-  const auth = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'grant_type=client_credentials',
-  });
-  if (!res.ok) throw new Error(`Spotify auth failed: ${res.status}`);
-  const data = await res.json();
-  token = data.access_token;
-  tokenExpiresAt = Date.now() + data.expires_in * 1000;
-  return token;
+  if (!tokenPromise) {
+    tokenPromise = (async () => {
+      const auth = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64');
+      const res = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=client_credentials',
+      });
+      if (!res.ok) throw new Error(`Spotify auth failed: ${res.status}`);
+      const data = await res.json();
+      token = data.access_token;
+      tokenExpiresAt = Date.now() + data.expires_in * 1000;
+      return token;
+    })().finally(() => { tokenPromise = null; });
+  }
+  return tokenPromise;
 }
 
 async function spotifyGet(path) {
