@@ -33,7 +33,7 @@ function MobileHeader() {
   const navigate = useNavigate();
   return (
     <header className="mobile-header" onClick={() => navigate('/')}>
-      <img src="/logo.png" alt="HaikZTIFY" width="32" height="32" style={{ borderRadius: 6 }} />
+      <img src="/logo.svg" alt="HaikZTIFY" width="32" height="32" />
       <span className="mobile-header-title">HaikZTIFY</span>
     </header>
   );

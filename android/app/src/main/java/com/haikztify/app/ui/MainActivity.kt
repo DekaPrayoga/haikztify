@@ -240,6 +240,7 @@ class MainActivity : AppCompatActivity() {
             class FakeAudio {
                 constructor(src) {
                     this._src = src || '';
+                    this._loadedSrc = ''; // tracks what URL ExoPlayer has loaded
                     this._volume = 1.0;
                     this._paused = true;
                     this._currentTime = 0;
@@ -298,16 +299,20 @@ class MainActivity : AppCompatActivity() {
 
                 play() {
                     if (window.NativeAudio && this._src) {
-                        if (this._paused && this._src) {
+                        if (this._src !== this._loadedSrc) {
+                            // New URL — tell ExoPlayer to load and play it
+                            this._loadedSrc = this._src;
                             window.NativeAudio.play(this._src);
-                        } else {
+                        } else if (this._paused) {
+                            // Same URL, was paused — resume
                             window.NativeAudio.resume();
                         }
+                        // If same URL and already playing, don't restart
                         this._paused = false;
                         this._fireEvent('play');
                         return Promise.resolve();
                     }
-                    return Promise.reject('NativeAudio not available');
+                    return Promise.reject(new Error('NativeAudio not available'));
                 }
 
                 pause() {
@@ -413,11 +418,11 @@ class MainActivity : AppCompatActivity() {
 
     // ========== Lifecycle ==========
 
+    @Deprecated("Use OnBackPressedCallback")
     override fun onBackPressed() {
         if (webView.canGoBack()) {
             webView.goBack()
         } else {
-            // Minimize app instead of closing (keep music playing)
             moveTaskToBack(true)
         }
     }
@@ -429,19 +434,20 @@ class MainActivity : AppCompatActivity() {
             unbindService(serviceConnection)
             serviceBound = false
         }
+        webView.stopLoading()
         webView.destroy()
         super.onDestroy()
     }
 
-    // Don't stop service on pause — this is what enables background playback
     override fun onPause() {
         super.onPause()
+        webView.onPause()
         // Music keeps playing via AudioPlaybackService
     }
 
     override fun onResume() {
         super.onResume()
-        // Resume position updates when app comes back to foreground
+        webView.onResume()
         if (audioService?.isPlaying() == true) {
             startPositionUpdates()
         }

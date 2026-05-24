@@ -32,21 +32,37 @@ export default function AlbumPage() {
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   };
 
-  const gradColors = ['#1a6b3c', '#6b1a5f', '#1a3b6b', '#6b4a1a', '#3b1a6b'];
-  const gradColor = gradColors[id.charCodeAt(0) % gradColors.length];
+  const coverUrl = album?.cover || null;
 
   return (
     <div className="page-genre">
-      {/* Header */}
-      <div className="detail-header" style={{ background: `linear-gradient(to bottom, ${gradColor}, #121212)` }}>
+      {/* Header with dynamic ambient color from album art */}
+      <div className="detail-header" style={{ position: 'relative', overflow: 'hidden', background: '#121212' }}>
+        {/* Blurred album art as ambient background */}
+        {coverUrl && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: `url(${coverUrl})`,
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            filter: 'blur(48px) saturate(1.8) brightness(0.38)',
+            transform: 'scale(1.15)',
+            zIndex: 0,
+          }} />
+        )}
+        {/* Gradient fade to dark at bottom */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(18,18,18,0.7) 70%, #121212 100%)',
+          zIndex: 1,
+        }} />
         {album?.cover ? (
-          <img className="detail-cover" src={album.cover} alt="" style={{ objectFit: 'cover', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }} />
+          <img className="detail-cover" src={album.cover} alt="" style={{ objectFit: 'cover', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', position: 'relative', zIndex: 2 }} />
         ) : (
-          <div className="detail-cover" style={{ background: '#282828', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="detail-cover" style={{ background: '#282828', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 2 }}>
             <svg viewBox="0 0 24 24" fill="#535353" width="64" height="64"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
           </div>
         )}
-        <div className="detail-info">
+        <div className="detail-info" style={{ position: 'relative', zIndex: 2 }}>
           <span className="detail-type">{album?.type === 'single' ? 'Single' : 'Album'}</span>
           <h1 className="detail-name" style={{ fontSize: album?.title?.length > 20 ? 32 : 48 }}>
             {album?.title || 'Loading...'}

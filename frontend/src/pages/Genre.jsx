@@ -13,15 +13,33 @@ export default function Genre() {
 
   return (
     <div className="page-genre">
-      <div className="detail-header" style={{ background: `linear-gradient(to bottom, ${genre.color}, #121212)` }}>
+      <div className="detail-header" style={{ position: 'relative', overflow: 'hidden', background: '#121212' }}>
+        {/* Ambient background - blurred genre image or solid color */}
         {genre.image ? (
-          <img className="detail-cover" src={genre.image} alt="" style={{ objectFit: 'cover' }} />
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: `url(${genre.image})`,
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            filter: 'blur(40px) saturate(2) brightness(0.35)',
+            transform: 'scale(1.12)',
+            zIndex: 0,
+          }} />
         ) : (
-          <div className="detail-cover" style={{ background: genre.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, fontWeight: 900 }}>
+          <div style={{ position: 'absolute', inset: 0, background: genre.color, opacity: 0.5, zIndex: 0 }} />
+        )}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.05), rgba(18,18,18,0.65) 65%, #121212 100%)',
+          zIndex: 1,
+        }} />
+        {genre.image ? (
+          <img className="detail-cover" src={genre.image} alt="" style={{ objectFit: 'cover', position: 'relative', zIndex: 2 }} />
+        ) : (
+          <div className="detail-cover" style={{ background: genre.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, fontWeight: 900, position: 'relative', zIndex: 2 }}>
             {genre.name.charAt(0)}
           </div>
         )}
-        <div className="detail-info">
+        <div className="detail-info" style={{ position: 'relative', zIndex: 2 }}>
           <span className="detail-type">Playlist</span>
           <h1 className="detail-name">{genre.name} Mix</h1>
           <p className="detail-meta">{songs.length} songs</p>

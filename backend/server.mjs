@@ -97,11 +97,42 @@ app.get('/api/search', async (req, res) => {
   if (!q) return res.json({ tracks: [], total: 0 });
   try {
     const data = await spotifyGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=${limit}&offset=${offset}`);
-    if (!data) return res.json({ tracks: [], total: 0 });
-    const tracks = (data.tracks?.items || []).map(mapTrack).filter(Boolean);
-    res.json({ tracks, total: data.tracks?.total || 0 });
+    if (data && data.tracks?.items?.length > 0) {
+      const tracks = data.tracks.items.map(mapTrack).filter(Boolean);
+      return res.json({ tracks, total: data.tracks?.total || 0 });
+    }
   } catch (e) {
-    console.error('Search error:', e.message);
+    console.error('Search Spotify error:', e.message);
+  }
+  // Fallback: yt-dlp search when Spotify rate-limited
+  try {
+    const ytData = await new Promise((resolve, reject) => {
+      
+      execFile('yt-dlp',
+        ['--no-warnings', '-j', '--flat-playlist', `scsearch3:${q}`],
+        { timeout: 15000, maxBuffer: 1024 * 1024 * 5 },
+        (err, stdout) => {
+          if (err) return reject(err);
+          const tracks = stdout.trim().split('\n').filter(Boolean).map(line => {
+            try {
+              const d = JSON.parse(line);
+              return {
+                id: d.id || Math.random().toString(36).slice(2),
+                title: d.title || q,
+                artist: d.uploader || d.channel || 'Unknown',
+                album: '', cover: d.thumbnail || '',
+                src: null, duration: d.duration ? Math.round(d.duration) : 0,
+                popularity: 0, artistId: '',
+              };
+            } catch { return null; }
+          }).filter(Boolean);
+          resolve(tracks);
+        }
+      );
+    });
+    return res.json({ tracks: ytData, total: ytData.length });
+  } catch (e) {
+    console.error('Search yt-dlp fallback error:', e.message);
     res.json({ tracks: [], total: 0 });
   }
 });
@@ -780,8 +811,11 @@ async function refreshHomeFeed() {
 }
 
 // Serve APK download
-app.get('/download/apk', (req, res) => {
-  res.download('/root/main/spotify-clone-react/backend/HaikzTify.apk', 'HaikzTify.apk');
+app.get('/apk/download', (req, res) => {
+  const apkPath = '/root/main/spotify-clone-react/backend/HaikzTify.apk';
+  res.download(apkPath, 'HaikzTify.apk', (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: 'APK not found' });
+  });
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────
@@ -791,7 +825,8 @@ app.get('/api/health', (req, res) => {
 
 // ── Token bookmarklet page ────────────────────────────────────────────────────
 app.get('/api/admin/refresh', (req, res) => {
-  const bm = `javascript:(async()=>{const s=await fetch('https://chatgpt.com/api/auth/session').then(r=>r.json());if(!s.accessToken)return alert('Login ke chatgpt.com dulu!');const r=await fetch('https://api.haikz.me/api/admin/ai-token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'haikz-ai-2026',token:s.accessToken})});const d=await r.json();alert(d.ok?'Token updated! Valid ~10 hari.':'Error: '+d.error);})();`;
+  const adminKey = process.env.ADMIN_AI_KEY || '';
+  const bm = `javascript:(async()=>{const s=await fetch('https://chatgpt.com/api/auth/session').then(r=>r.json());if(!s.accessToken)return alert('Login ke chatgpt.com dulu!');const r=await fetch('https://api.haikz.me/api/admin/ai-token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'${adminKey}',token:s.accessToken})});const d=await r.json();alert(d.ok?'Token updated! Valid ~10 hari.':'Error: '+d.error);})();`;
   res.send(`<!DOCTYPE html><html><head><title>HaikzTIFY Token Refresh</title>
 <meta charset="utf-8"><style>body{font:16px/1.6 sans-serif;max-width:480px;margin:60px auto;padding:0 20px;background:#111;color:#fff}
 a.bm{display:inline-block;background:#1db954;color:#000;font-weight:700;padding:12px 24px;border-radius:500px;text-decoration:none;margin:20px 0}
@@ -808,10 +843,11 @@ pre{background:#1a1a1a;padding:12px;border-radius:6px;font-size:12px;overflow-x:
 </body></html>`);
 });
 
-// ── AI token update (owner-only, keyed by haikz-ai-2026) ─────────────────────
+// ── AI token update (owner-only) ──────────────────────────────────────────────
 app.post('/api/admin/ai-token', express.json(), async (req, res) => {
   const { key, token } = req.body || {};
-  if (key !== 'haikz-ai-2026') return res.status(401).json({ error: 'unauthorized' });
+  const adminKey = process.env.ADMIN_AI_KEY;
+  if (!adminKey || key !== adminKey) return res.status(401).json({ error: 'unauthorized' });
   if (!token || !token.startsWith('ey')) return res.status(400).json({ error: 'bad token' });
 
   try {

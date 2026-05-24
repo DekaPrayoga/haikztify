@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="barGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1ed760"/>
+      <stop offset="100%" stop-color="#1DB954"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Dark rounded background -->
+  <rect width="200" height="200" rx="36" fill="#121212"/>
+
+  <!-- Subtle green circle glow behind bars -->
+  <ellipse cx="100" cy="110" rx="72" ry="40" fill="#1DB954" opacity="0.06"/>
+
+  <!-- Equalizer bars — 6 bars, wave shape, centered vertically -->
+  <g filter="url(#glow)" fill="url(#barGrad)">
+    <!-- Bar 1 -->
+    <rect x="26" y="100" width="18" height="60" rx="9"/>
+    <!-- Bar 2 -->
+    <rect x="50" y="80" width="18" height="80" rx="9"/>
+    <!-- Bar 3 -->
+    <rect x="74" y="60" width="18" height="100" rx="9"/>
+    <!-- Bar 4 (tallest) -->
+    <rect x="98" y="36" width="18" height="124" rx="9"/>
+    <!-- Bar 5 -->
+    <rect x="122" y="52" width="18" height="108" rx="9" opacity="0.92"/>
+    <!-- Bar 6 -->
+    <rect x="146" y="72" width="18" height="88" rx="9" opacity="0.8"/>
+    <!-- Bar 7 -->
+    <rect x="170" y="94" width="14" height="66" rx="7" opacity="0.6"/>
+  </g>
+
+  <!-- Bottom line accent -->
+  <rect x="26" y="162" width="156" height="3" rx="1.5" fill="#1DB954" opacity="0.35"/>
+</svg>

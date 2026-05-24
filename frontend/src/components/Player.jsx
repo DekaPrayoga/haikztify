@@ -37,7 +37,7 @@ export default function Player() {
     <footer className="player-bar">
       <div className="player-left">
         <img
-          className="player-cover"
+          className={`player-cover${isPlaying ? ' player-cover-playing' : ''}`}
           src={currentTrack?.cover || 'data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 80 80%27%3E%3Crect fill=%27%23282828%27 width=%2780%27 height=%2780%27/%3E%3Cpath d=%27M40 25a15 15 0 1 0 0 30 15 15 0 0 0 0-30zm0 3a12 12 0 1 1 0 24 12 12 0 0 1 0-24zm-3-6a3 3 0 1 0 6 0 3 3 0 0 0-6 0z%27 fill=%27%23555%27/%3E%3C/svg%3E'}
           alt=""
           onError={(e) => { e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 80 80%27%3E%3Crect fill=%27%23282828%27 width=%2780%27 height=%2780%27/%3E%3Cpath d=%27M40 25a15 15 0 1 0 0 30 15 15 0 0 0 0-30zm0 3a12 12 0 1 1 0 24 12 12 0 0 1 0-24zm-3-6a3 3 0 1 0 6 0 3 3 0 0 0-6 0z%27 fill=%27%23555%27/%3E%3C/svg%3E'; }}

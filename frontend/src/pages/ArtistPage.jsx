@@ -79,18 +79,31 @@ export default function ArtistPage() {
 
   return (
     <div className="page-genre">
-      {/* Hero banner */}
+      {/* Hero banner with dynamic ambient color */}
       <div style={{
         position: 'relative', height: 280, margin: '-24px -32px 0',
-        background: `linear-gradient(to bottom, rgba(0,0,0,0.3), #121212)`,
+        background: '#121212',
         overflow: 'hidden',
       }}>
         {artist.cover && (
-          <img
-            src={artist.cover} alt=""
-            style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6, position: 'absolute', inset: 0 }}
-          />
+          <>
+            {/* Blurred ambient background */}
+            <div style={{
+              position: 'absolute', inset: 0,
+              backgroundImage: `url(${artist.cover})`,
+              backgroundSize: 'cover', backgroundPosition: 'center top',
+              filter: 'blur(40px) saturate(2) brightness(0.32)',
+              transform: 'scale(1.12)',
+            }} />
+            {/* Artist photo on top */}
+            <img
+              src={artist.cover} alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', opacity: 0.65, position: 'absolute', inset: 0 }}
+            />
+          </>
         )}
+        {/* Gradient fade */}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(18,18,18,0.6) 60%, #121212 100%)' }} />
         <div style={{ position: 'absolute', bottom: 24, left: 32 }}>
           <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="#1db954"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>

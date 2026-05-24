@@ -197,12 +197,17 @@ export default function Search() {
     setSearching(true);
     setOnlineResults([]);
     setOnlineOffset(0);
-    const result = await searchTracks(q, 10, 0);
-    if (currentQuery.current !== q) return; // stale
-    setOnlineResults(result.tracks);
-    setOnlineTotal(result.total);
-    setOnlineOffset(result.tracks.length);
-    setSearching(false);
+    try {
+      const result = await searchTracks(q, 10, 0);
+      if (currentQuery.current !== q) return;
+      setOnlineResults(result.tracks);
+      setOnlineTotal(result.total);
+      setOnlineOffset(result.tracks.length);
+    } catch (_) {
+      // searchTracks handles errors internally
+    } finally {
+      if (currentQuery.current === q) setSearching(false);
+    }
   }, []);
 
   const loadMoreOnline = useCallback(async () => {
