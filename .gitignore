@@ -68,3 +68,4 @@ DEPLOY.md
 .cache/
 coverage/
 .vercel
+frontend/deploy.mjs
