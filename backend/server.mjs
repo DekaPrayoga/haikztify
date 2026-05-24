@@ -349,7 +349,9 @@ const audioCache = new Map();
 app.get('/api/yt-audio', async (req, res) => {
   const q = req.query.q;
   if (!q) return res.status(400).json({ error: 'Missing q' });
-  if (audioCache.has(q)) return res.json(audioCache.get(q));
+  // SoundCloud signed URLs expire ~1 hour, so cache only 45 minutes
+  const cached = audioCache.get(q);
+  if (cached && Date.now() < cached.expiresAt) return res.json({ url: cached.url });
   try {
     const { stdout } = await execFileAsync('yt-dlp', [
       '-f', 'http_mp3_0_1/bestaudio[protocol=http]/bestaudio',
@@ -358,10 +360,10 @@ app.get('/api/yt-audio', async (req, res) => {
     ], { timeout: 15000 });
     const audioUrl = stdout.trim();
     if (audioUrl) {
-      const result = { url: audioUrl };
-      audioCache.set(q, result);
-      setTimeout(() => audioCache.delete(q), 3 * 60 * 60 * 1000);
-      return res.json(result);
+      const TTL = 45 * 60 * 1000; // 45 minutes — SoundCloud Policy expires ~1h
+      audioCache.set(q, { url: audioUrl, expiresAt: Date.now() + TTL });
+      setTimeout(() => audioCache.delete(q), TTL);
+      return res.json({ url: audioUrl });
     }
     res.status(404).json({ error: 'No audio found' });
   } catch (e) {

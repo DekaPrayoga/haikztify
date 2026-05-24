@@ -639,10 +639,19 @@ Object.entries(MUSIC_CATALOG).forEach(([genre, songs]) => {
 });
 
 // In-memory cache so resolved URLs are reused without re-fetching
+// TTL 40 min — SoundCloud signed URLs expire ~1h, leave buffer
 const resolvedCache = new Map();
+const CACHE_TTL = 40 * 60 * 1000;
+
+export function clearResolvedCache(trackId) {
+  if (trackId) resolvedCache.delete(trackId);
+  else resolvedCache.clear();
+}
 
 export function prefetchTrackAudio(track) {
-  if (!track || resolvedCache.has(track.id)) return;
+  if (!track) return;
+  const cached = resolvedCache.get(track.id);
+  if (cached && Date.now() < cached.expiresAt) return;
   resolveTrackAudio(track).catch(() => {});
 }
 
@@ -650,7 +659,8 @@ export async function resolveTrackAudio(track) {
   if (track.src && (track.src.includes('localhost') || track.src.includes('/api/proxy') || track.src.includes('/api/yt-stream') || track.src.includes(':3001'))) return track;
 
   const cached = resolvedCache.get(track.id);
-  if (cached) return { ...track, ...cached };
+  if (cached && Date.now() < cached.expiresAt) return { ...track, ...cached };
+  if (cached) resolvedCache.delete(track.id); // expired
 
   const q = `${track.title} ${track.artist}`;
 
@@ -676,7 +686,7 @@ export async function resolveTrackAudio(track) {
         duration: best.duration,
         cover: track.cover || best.cover,
       };
-      resolvedCache.set(track.id, { src: resolved.src, duration: resolved.duration, cover: resolved.cover });
+      resolvedCache.set(track.id, { src: resolved.src, duration: resolved.duration, cover: resolved.cover, expiresAt: Date.now() + CACHE_TTL });
       return resolved;
     }
   }
@@ -688,7 +698,7 @@ export async function resolveTrackAudio(track) {
       ...track,
       src: `${API_BASE}/api/yt-stream?url=${encodeURIComponent(ytData.url)}`,
     };
-    resolvedCache.set(track.id, { src: resolved.src, duration: resolved.duration, cover: resolved.cover });
+    resolvedCache.set(track.id, { src: resolved.src, duration: resolved.duration, cover: resolved.cover, expiresAt: Date.now() + CACHE_TTL });
     return resolved;
   }
 

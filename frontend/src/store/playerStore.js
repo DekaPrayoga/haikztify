@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ALL_SONGS, resolveTrackAudio, prefetchTrackAudio } from '../data/catalog';
+import { ALL_SONGS, resolveTrackAudio, prefetchTrackAudio, clearResolvedCache } from '../data/catalog';
 
 const audio = typeof window !== 'undefined' ? new Audio() : null;
 
@@ -207,7 +207,23 @@ if (audio) {
     if (repeat === 2) { audio.currentTime = 0; audio.play(); return; }
     usePlayerStore.getState().playNext();
   });
-  audio.addEventListener('error', () => setTimeout(() => usePlayerStore.getState().playNext(), 1500));
+  audio.addEventListener('error', async () => {
+    const store = usePlayerStore.getState();
+    const track = store.currentTrack;
+    if (!track) return;
+    // First error: URL likely expired — clear cache and re-resolve once
+    if (!track._retried) {
+      clearResolvedCache(track.id);
+      const fresh = await resolveTrackAudio({ ...track, src: null }).catch(() => null);
+      if (fresh?.src) {
+        audio.src = fresh.src;
+        audio.play().catch(() => {});
+        usePlayerStore.setState({ currentTrack: { ...track, ...fresh, _retried: true } });
+        return;
+      }
+    }
+    setTimeout(() => usePlayerStore.getState().playNext(), 1500);
+  });
 
   window.addEventListener('haikztify-prev', () => {
     usePlayerStore.getState().playPrev();
