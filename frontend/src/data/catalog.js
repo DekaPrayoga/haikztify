@@ -55,6 +55,139 @@ export const MUSIC_CATALOG = {
       "album": "Melayang",
       "src": "",
       "cover": "https://i.scdn.co/image/ab67616d0000b273be7982704b25a460843a308b"
+    },
+    {
+      "title": "Jatuh Hati",
+      "artist": "Raisa",
+      "album": "Raisa",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273c6f7af6b7c3b8e5a9c4d2e1f"
+    },
+    {
+      "title": "Usai di Sini",
+      "artist": "Raisa",
+      "album": "Heart to Heart",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2737d9b2a9b8c5d3e4f5a6b7c8d"
+    },
+    {
+      "title": "Kesempurnaan Cinta",
+      "artist": "Rizky Febian",
+      "album": "Kesempurnaan Cinta",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273a1b2c3d4e5f6a7b8c9d0e1f2"
+    },
+    {
+      "title": "Indah Pada Waktunya",
+      "artist": "Rizky Febian ft. Mikha Angelo",
+      "album": "Indah Pada Waktunya",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2731a2b3c4d5e6f7a8b9c0d1e2f"
+    },
+    {
+      "title": "Terima Kasih Cinta",
+      "artist": "Afgan",
+      "album": "The One",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2732a3b4c5d6e7f8a9b0c1d2e3f"
+    },
+    {
+      "title": "Sadis",
+      "artist": "Afgan",
+      "album": "Sadis",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2733a4b5c6d7e8f9a0b1c2d3e4f"
+    },
+    {
+      "title": "Tetap Dalam Jiwa",
+      "artist": "Isyana Sarasvati",
+      "album": "Tetap Dalam Jiwa",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2734a5b6c7d8e9f0a1b2c3d4e5f"
+    },
+    {
+      "title": "Kau Adalah",
+      "artist": "Isyana Sarasvati ft. Rayi Putra",
+      "album": "Explore!",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2735a6b7c8d9e0f1a2b3c4d5e6f"
+    },
+    {
+      "title": "Waktu Yang Salah",
+      "artist": "Fiersa Besari",
+      "album": "Konstellasi",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2736a7b8c9d0e1f2a3b4c5d6e7f"
+    },
+    {
+      "title": "Zona Nyaman",
+      "artist": "Fourtwnty",
+      "album": "Lelaku",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2737a8b9c0d1e2f3a4b5c6d7e8f"
+    },
+    {
+      "title": "Dan",
+      "artist": "Sheila On 7",
+      "album": "Kisah Klasik Untuk Masa Depan",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2738a9b0c1d2e3f4a5b6c7d8e9f"
+    },
+    {
+      "title": "Kangen",
+      "artist": "Dewa 19",
+      "album": "Dewa 19",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2739a0b1c2d3e4f5a6b7c8d9e0f"
+    },
+    {
+      "title": "Separuh Aku",
+      "artist": "Noah",
+      "album": "Separuh Aku",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273aa1b2c3d4e5f6a7b8c9d0e1f"
+    },
+    {
+      "title": "Rehat",
+      "artist": "Kunto Aji",
+      "album": "Mantra Mantra",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273ba2b3c4d5e6f7a8b9c0d1e2f"
+    },
+    {
+      "title": "Amin Paling Serius",
+      "artist": "Sal Priadi ft. Nadin Amizah",
+      "album": "Amin Paling Serius",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273ca3b4c5d6e7f8a9b0c1d2e3f"
+    },
+    {
+      "title": "Melawan Restu",
+      "artist": "Mahalini",
+      "album": "Melawan Restu",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273da4b5c6d7e8f9a0b1c2d3e4f"
+    },
+    {
+      "title": "Gemintang Hatiku",
+      "artist": "Tiara Andini",
+      "album": "Gemintang Hatiku",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273ea5b6c7d8e9f0a1b2c3d4e5f"
+    },
+    {
+      "title": "Secukupnya",
+      "artist": "Hindia",
+      "album": "Menari Dengan Bayangan",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273fa6b7c8d9e0f1a2b3c4d5e6f"
+    },
+    {
+      "title": "To The Bone",
+      "artist": "Pamungkas",
+      "album": "Walk The Talk",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2730a7b8c9d0e1f2a3b4c5d6e7f"
     }
   ],
   "pop": [
@@ -113,6 +246,55 @@ export const MUSIC_CATALOG = {
       "album": "F*CK LOVE 3+",
       "src": "",
       "cover": "https://i.scdn.co/image/ab67616d0000b273aed1660585c1e3c9ffb50b6a"
+    },
+    {
+      "title": "Cruel Summer",
+      "artist": "Taylor Swift",
+      "album": "Lover",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647"
+    },
+    {
+      "title": "Watermelon Sugar",
+      "artist": "Harry Styles",
+      "album": "Fine Line",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2732e8ed79e177ff6011076f5f0"
+    },
+    {
+      "title": "Happier",
+      "artist": "Olivia Rodrigo",
+      "album": "SOUR",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273a91c10fe9472d9bd89802e5a"
+    },
+    {
+      "title": "drivers license",
+      "artist": "Olivia Rodrigo",
+      "album": "SOUR",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273a91c10fe9472d9bd89802e5a"
+    },
+    {
+      "title": "Peaches",
+      "artist": "Justin Bieber ft. Daniel Caesar",
+      "album": "Justice",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2739478c87599550dd73bfa7e02"
+    },
+    {
+      "title": "Heat Waves",
+      "artist": "Glass Animals",
+      "album": "Dreamland",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2739e495fb707973f3390850eea"
+    },
+    {
+      "title": "Unholy",
+      "artist": "Sam Smith ft. Kim Petras",
+      "album": "Gloria",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273d6c9d4b0b5b5b5b5b5b5b5b5"
     }
   ],
   "hiphop": [
@@ -157,6 +339,41 @@ export const MUSIC_CATALOG = {
       "album": "Beerbongs & Bentleys",
       "src": "",
       "cover": "https://i.scdn.co/image/ab67616d0000b273b1c4b76e23414c9f20242268"
+    },
+    {
+      "title": "Sunflower",
+      "artist": "Post Malone & Swae Lee",
+      "album": "Spider-Man: Into the Spider-Verse",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273e2e352d89826aef6dbd5ff8f"
+    },
+    {
+      "title": "Rich Flex",
+      "artist": "Drake & 21 Savage",
+      "album": "Her Loss",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2730b5e838e7e7e7e7e7e7e7e7e"
+    },
+    {
+      "title": "Essence",
+      "artist": "Wizkid ft. Tems",
+      "album": "Made in Lagos",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2731f4a0e9b8c7d6e5f4a3b2c1d"
+    },
+    {
+      "title": "Knife Talk",
+      "artist": "Drake ft. 21 Savage",
+      "album": "Certified Lover Boy",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2732a1b0c9d8e7f6a5b4c3d2e1f"
+    },
+    {
+      "title": "Money In The Grave",
+      "artist": "Drake ft. Rick Ross",
+      "album": "Money In The Grave",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2733a2b1c0d9e8f7a6b5c4d3e2f"
     }
   ],
   "rock": [
@@ -194,6 +411,41 @@ export const MUSIC_CATALOG = {
       "album": "Hot Fuss",
       "src": "",
       "cover": "https://i.scdn.co/image/ab67616d0000b273ccdddd46119a4ff53eaf1f5d"
+    },
+    {
+      "title": "Somebody That I Used to Know",
+      "artist": "Gotye ft. Kimbra",
+      "album": "Making Mirrors",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2734b3c2d1e0f9a8b7c6d5e4f3a"
+    },
+    {
+      "title": "Seven Nation Army",
+      "artist": "The White Stripes",
+      "album": "Elephant",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2735b4c3d2e1f0a9b8c7d6e5f4a"
+    },
+    {
+      "title": "Creep",
+      "artist": "Radiohead",
+      "album": "Pablo Honey",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2736b5c4d3e2f1a0b9c8d7e6f5a"
+    },
+    {
+      "title": "Come As You Are",
+      "artist": "Nirvana",
+      "album": "Nevermind",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273fbc71c99f9c1296c56dd51b6"
+    },
+    {
+      "title": "Under The Bridge",
+      "artist": "Red Hot Chili Peppers",
+      "album": "Blood Sugar Sex Magik",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2737b6d5e4f3a2b1c0d9e8f7a6b"
     }
   ],
   "rnb": [
@@ -224,6 +476,41 @@ export const MUSIC_CATALOG = {
       "album": "H.E.R.",
       "src": "",
       "cover": "https://i.scdn.co/image/ab67616d0000b273092701757191b300b7b210e8"
+    },
+    {
+      "title": "Essence",
+      "artist": "SZA",
+      "album": "SOS",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273bc18bdade69ec5ef0bb25b17"
+    },
+    {
+      "title": "Superstar",
+      "artist": "Usher",
+      "album": "Confessions",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2738b6c7d5e4f3a2b1c0d9e8f7a"
+    },
+    {
+      "title": "No Scrubs",
+      "artist": "TLC",
+      "album": "FanMail",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2739b7c8d6e5f4a3b2c1d0e9f8a"
+    },
+    {
+      "title": "Crazy In Love",
+      "artist": "Beyoncé ft. Jay-Z",
+      "album": "Dangerously in Love",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273ab8c9d7e6f5a4b3c2d1e0f9a"
+    },
+    {
+      "title": "Blurred Lines",
+      "artist": "Robin Thicke ft. T.I.",
+      "album": "Blurred Lines",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273bb9cad7e6f5a4b3c2d1e0f9a"
     }
   ],
   "electronic": [
@@ -254,6 +541,48 @@ export const MUSIC_CATALOG = {
       "album": "Clarity",
       "src": "",
       "cover": "https://i.scdn.co/image/ab67616d0000b27339667b8510033317b3553ca4"
+    },
+    {
+      "title": "Lean On",
+      "artist": "Major Lazer & DJ Snake ft. MØ",
+      "album": "Peace Is the Mission",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273cb4e5a5b6c7d8e9f0a1b2c3d"
+    },
+    {
+      "title": "Animals",
+      "artist": "Martin Garrix",
+      "album": "Gold Skies",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273db5e6a7b8c9d0e1f2a3b4c5d"
+    },
+    {
+      "title": "Strobe",
+      "artist": "deadmau5",
+      "album": "For Lack of a Better Name",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273eb6f7a8b9c0d1e2f3a4b5c6d"
+    },
+    {
+      "title": "Scary Monsters and Nice Sprites",
+      "artist": "Skrillex",
+      "album": "Scary Monsters and Nice Sprites",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b273fb7a8b9c0d1e2f3a4b5c6d7e"
+    },
+    {
+      "title": "One More Time",
+      "artist": "Daft Punk",
+      "album": "Discovery",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2730b8b9c0d1e2f3a4b5c6d7e8f"
+    },
+    {
+      "title": "Get Lucky",
+      "artist": "Daft Punk ft. Pharrell Williams",
+      "album": "Random Access Memories",
+      "src": "",
+      "cover": "https://i.scdn.co/image/ab67616d0000b2731b9c0d1e2f3a4b5c6d7e8f9a"
     }
   ]
 };
