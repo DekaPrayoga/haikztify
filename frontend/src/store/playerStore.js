@@ -170,7 +170,18 @@ const usePlayerStore = create((set, get) => ({
   },
 
   seekTo: (pct) => {
-    if (!audio || !audio.duration) return;
+    if (!audio) return;
+    // If duration not ready yet, wait for it then seek
+    if (!audio.duration || !isFinite(audio.duration)) {
+      const onReady = () => {
+        audio.currentTime = (pct / 100) * audio.duration;
+        audio.removeEventListener('durationchange', onReady);
+        audio.removeEventListener('loadedmetadata', onReady);
+      };
+      audio.addEventListener('durationchange', onReady);
+      audio.addEventListener('loadedmetadata', onReady);
+      return;
+    }
     audio.currentTime = (pct / 100) * audio.duration;
   },
 
