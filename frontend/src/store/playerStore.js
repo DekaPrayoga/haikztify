@@ -87,10 +87,11 @@ const usePlayerStore = create((set, get) => ({
     // BUG FIX #1: race condition — increment ID so any stale resolve aborts
     const myRequestId = ++playRequestId;
 
-    set({ currentTrack: track, currentIndex: idx >= 0 ? idx : 0, queue: q, isLoading: true });
+    set({ currentTrack: track, currentIndex: idx >= 0 ? idx : 0, queue: q, isLoading: true, progress: 0, currentTime: 0, duration: 0 });
 
     let resolved = track;
-    if (!track.src || (!track.src.includes('localhost') && !track.src.includes('/api/proxy') && !track.src.includes('/api/yt-stream') && !track.src.includes(':3001'))) {
+    // Skip resolve only for localhost/proxy — yt-stream URLs expire, always re-resolve them
+    if (!track.src || (!track.src.includes('localhost') && !track.src.includes('/api/proxy') && !track.src.includes(':3001'))) {
       resolved = await resolveTrackAudio(track);
       if (playRequestId !== myRequestId) return; // stale — user clicked another track
       if (!resolved.src) {

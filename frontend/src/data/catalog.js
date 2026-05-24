@@ -664,9 +664,7 @@ export async function resolveTrackAudio(track) {
 
   const q = `${track.title} ${track.artist}`;
 
-  // Fire both requests in parallel — Spotify is faster, yt-dlp is the fallback.
-  // If Spotify returns a preview URL we use it immediately without waiting for yt-dlp.
-  // If not, yt-dlp is already running so we only wait for its remaining time.
+  // Fire both in parallel — prefer yt-dlp (full song) over Spotify preview (30s)
   const spotifyFetch = fetch(`${API_BASE}/api/search?q=${encodeURIComponent(q)}`)
     .then(r => r.json())
     .catch(() => null);
@@ -674,24 +672,7 @@ export async function resolveTrackAudio(track) {
     .then(r => r.ok ? r.json() : null)
     .catch(() => null);
 
-  const spotifyData = await spotifyFetch;
-  if (spotifyData?.tracks?.length > 0) {
-    const withPreview = spotifyData.tracks.find(r => r.src);
-    const best = withPreview || spotifyData.tracks[0];
-    if (best.src) {
-      const resolved = {
-        ...track,
-        // Keep original track.id so findIndex in playerStore still works correctly
-        src: `${API_BASE}/api/proxy?url=${encodeURIComponent(best.src)}`,
-        duration: best.duration,
-        cover: track.cover || best.cover,
-      };
-      resolvedCache.set(track.id, { src: resolved.src, duration: resolved.duration, cover: resolved.cover, expiresAt: Date.now() + CACHE_TTL });
-      return resolved;
-    }
-  }
-
-  // Spotify had no preview — yt-dlp fetch is already in-flight, just await it
+  // Wait for yt-dlp first — full song, no 30s limit
   const ytData = await ytFetch;
   if (ytData?.url) {
     const resolved = {
@@ -700,6 +681,23 @@ export async function resolveTrackAudio(track) {
     };
     resolvedCache.set(track.id, { src: resolved.src, duration: resolved.duration, cover: resolved.cover, expiresAt: Date.now() + CACHE_TTL });
     return resolved;
+  }
+
+  // yt-dlp failed — fall back to Spotify 30s preview
+  const spotifyData = await spotifyFetch;
+  if (spotifyData?.tracks?.length > 0) {
+    const withPreview = spotifyData.tracks.find(r => r.src);
+    const best = withPreview || spotifyData.tracks[0];
+    if (best.src) {
+      const resolved = {
+        ...track,
+        src: `${API_BASE}/api/proxy?url=${encodeURIComponent(best.src)}`,
+        duration: best.duration,
+        cover: track.cover || best.cover,
+      };
+      resolvedCache.set(track.id, { src: resolved.src, duration: resolved.duration, cover: resolved.cover, expiresAt: Date.now() + CACHE_TTL });
+      return resolved;
+    }
   }
 
   return { ...track, src: null };
