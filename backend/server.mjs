@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import crypto from 'crypto';
 
@@ -349,26 +349,35 @@ const audioCache = new Map();
 app.get('/api/yt-audio', async (req, res) => {
   const q = req.query.q;
   if (!q) return res.status(400).json({ error: 'Missing q' });
-  // SoundCloud signed URLs expire ~1 hour, so cache only 45 minutes
   const cached = audioCache.get(q);
   if (cached && Date.now() < cached.expiresAt) return res.json({ url: cached.url });
-  try {
-    const { stdout } = await execFileAsync('yt-dlp', [
-      '-f', 'http_mp3_0_1/bestaudio[protocol=http]/bestaudio',
-      '-g', '--no-warnings', '--no-playlist',
-      `scsearch1:${q}`
-    ], { timeout: 15000 });
-    const audioUrl = stdout.trim();
-    if (audioUrl) {
-      const TTL = 3 * 60 * 1000; // 3 min — SoundCloud Policy expires ~5 min
-      audioCache.set(q, { url: audioUrl, expiresAt: Date.now() + TTL });
+
+  const scSearch = async (query) => {
+    try {
+      const { stdout } = await execFileAsync('yt-dlp', [
+        '-f', 'http_mp3_0_1/bestaudio[protocol=http]/bestaudio',
+        '-g', '--no-warnings', '--no-playlist',
+        `scsearch1:${query}`
+      ], { timeout: 15000 });
+      const url = stdout.trim();
+      // cf-preview-media = 30s preview, reject it
+      return (url && !url.includes('cf-preview-media')) ? url : null;
+    } catch (_) { return null; }
+  };
+
+  // Try multiple SoundCloud query variations to avoid preview-only results
+  const queries = [q, `${q} full`, q.split(' ').slice(0, -1).join(' ')].filter(Boolean);
+  for (const query of queries) {
+    const url = await scSearch(query);
+    if (url) {
+      const TTL = 3 * 60 * 1000;
+      audioCache.set(q, { url, expiresAt: Date.now() + TTL });
       setTimeout(() => audioCache.delete(q), TTL);
-      return res.json({ url: audioUrl });
+      return res.json({ url });
     }
-    res.status(404).json({ error: 'No audio found' });
-  } catch (e) {
-    res.status(500).json({ error: 'yt-dlp failed' });
   }
+
+  res.status(404).json({ error: 'No audio found' });
 });
 
 // ── STREAM PROXY ───────────────────────────────────────────────────────────────
