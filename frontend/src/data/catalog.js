@@ -634,10 +634,7 @@ const API_BASE = import.meta.env.VITE_API_URL
 export const ALL_SONGS = [];
 Object.entries(MUSIC_CATALOG).forEach(([genre, songs]) => {
   songs.forEach((s, i) => {
-    s.genre = genre;
-    s.id = `${genre}_${i}`;
-    s.duration = 0;
-    ALL_SONGS.push(s);
+    ALL_SONGS.push({ ...s, genre, id: `${genre}_${i}`, duration: s.duration || 0 });
   });
 });
 

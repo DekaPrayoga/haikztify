@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ALL_SONGS, MUSIC_CATALOG } from '../data/catalog';
 import { API_BASE } from '../services/spotifyApi';
@@ -156,11 +156,13 @@ export default function Home() {
   const radios = feed?.radios || [];
   // Use Spotify sections if loaded, else fall back to local catalog
   const apiSections = feed?.genreSections || [];
-  const genreSections = apiSections.some(s => s.tracks.length > 0)
-    ? apiSections
-    : CATALOG_SECTIONS;
+  const genreSections = useMemo(
+    () => apiSections.some(s => s.tracks.length > 0) ? apiSections : CATALOG_SECTIONS,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [feed]
+  );
 
-  // Build the "Untukmu" mixed pool: dedupe + shuffle once across all genre tracks
+  // Build the "Untukmu" mixed pool: dedupe + shuffle once per genreSections change
   const [shuffledPool, setShuffledPool] = useState([]);
   useEffect(() => {
     if (genreSections.length === 0) return;
@@ -171,7 +173,6 @@ export default function Home() {
         if (!seen.has(t.id)) { seen.add(t.id); flat.push(t); }
       }
     }
-    // Fisher-Yates shuffle (stable per page load)
     for (let i = flat.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [flat[i], flat[j]] = [flat[j], flat[i]];
