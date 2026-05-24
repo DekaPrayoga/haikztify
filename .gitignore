@@ -67,3 +67,4 @@ DEPLOY.md
 *.tgz
 .cache/
 coverage/
+.vercel
