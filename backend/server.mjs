@@ -360,7 +360,7 @@ app.get('/api/yt-audio', async (req, res) => {
     ], { timeout: 15000 });
     const audioUrl = stdout.trim();
     if (audioUrl) {
-      const TTL = 45 * 60 * 1000; // 45 minutes — SoundCloud Policy expires ~1h
+      const TTL = 3 * 60 * 1000; // 3 min — SoundCloud Policy expires ~5 min
       audioCache.set(q, { url: audioUrl, expiresAt: Date.now() + TTL });
       setTimeout(() => audioCache.delete(q), TTL);
       return res.json({ url: audioUrl });

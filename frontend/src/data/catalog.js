@@ -639,9 +639,9 @@ Object.entries(MUSIC_CATALOG).forEach(([genre, songs]) => {
 });
 
 // In-memory cache so resolved URLs are reused without re-fetching
-// TTL 40 min — SoundCloud signed URLs expire ~1h, leave buffer
+// TTL 3 min — SoundCloud signed URLs expire ~5 min, leave buffer
 const resolvedCache = new Map();
-const CACHE_TTL = 40 * 60 * 1000;
+const CACHE_TTL = 3 * 60 * 1000;
 
 export function clearResolvedCache(trackId) {
   if (trackId) resolvedCache.delete(trackId);
