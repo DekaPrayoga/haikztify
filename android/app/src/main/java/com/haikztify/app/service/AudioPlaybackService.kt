@@ -47,7 +47,8 @@ class AudioPlaybackService : MediaSessionService() {
 
     // ── ForwardingPlayer: enables prev/next/shuffle in notification ───────────
     // ExoPlayer with a single item has no prev/next commands by default.
-    // We override available commands and intercept the calls to route them to JS.
+    // We override available commands AND isCommandAvailable (Media3 checks both)
+    // and intercept the calls to route them to JS.
     private inner class MediaSessionPlayer(player: ExoPlayer) : ForwardingPlayer(player) {
 
         override fun getAvailableCommands(): Player.Commands =
@@ -56,19 +57,23 @@ class AudioPlaybackService : MediaSessionService() {
                 .add(Player.COMMAND_SEEK_TO_PREVIOUS)
                 .build()
 
+        // Media3's DefaultMediaNotificationProvider calls isCommandAvailable(),
+        // NOT getAvailableCommands(), to decide which buttons to show.
+        override fun isCommandAvailable(command: Int): Boolean =
+            command == Player.COMMAND_SEEK_TO_NEXT ||
+            command == Player.COMMAND_SEEK_TO_PREVIOUS ||
+            super.isCommandAvailable(command)
+
         override fun seekToNext() {
-            // Notification "next" → tell JS to play next track
             mainThread { onTrackEnded?.invoke() }
         }
 
         override fun seekToPrevious() {
-            // Notification "prev" → tell JS to play previous track
             mainThread { onPreviousTrack?.invoke() }
         }
 
         override fun setShuffleModeEnabled(shuffleModeEnabled: Boolean) {
             super.setShuffleModeEnabled(shuffleModeEnabled)
-            // Sync shuffle state to JS player
             mainThread { onShuffleToggled?.invoke(shuffleModeEnabled) }
         }
     }

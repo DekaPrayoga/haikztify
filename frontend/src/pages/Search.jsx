@@ -174,26 +174,11 @@ export default function Search() {
   const [onlineOffset, setOnlineOffset] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const navigate = useNavigate();
-  const timerRef = useRef(null);
   const currentQuery = useRef('');
 
-  const doSearch = useCallback(async (q) => {
-    if (!q || q.length < 2) {
-      setLocalResults([]);
-      setOnlineResults([]);
-      setSearched(false);
-      setOnlineTotal(0);
-      setOnlineOffset(0);
-      return;
-    }
-    setSearched(true);
+  const doOnlineSearch = useCallback(async (q) => {
+    if (!q || q.length < 2) return;
     currentQuery.current = q;
-    const ql = q.toLowerCase();
-    setLocalResults(ALL_SONGS.filter(s =>
-      s.title.toLowerCase().includes(ql) ||
-      s.artist.toLowerCase().includes(ql) ||
-      (s.album || '').toLowerCase().includes(ql)
-    ));
     setSearching(true);
     setOnlineResults([]);
     setOnlineOffset(0);
@@ -204,7 +189,6 @@ export default function Search() {
       setOnlineTotal(result.total);
       setOnlineOffset(result.tracks.length);
     } catch (_) {
-      // searchTracks handles errors internally
     } finally {
       if (currentQuery.current === q) setSearching(false);
     }
@@ -219,11 +203,32 @@ export default function Search() {
     setLoadingMore(false);
   }, [query, onlineOffset, loadingMore]);
 
+  // Typing → local catalog search only (instant, no API call)
   const handleInput = (e) => {
     const val = e.target.value;
     setQuery(val);
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => doSearch(val), 400);
+    if (!val || val.length < 2) {
+      setLocalResults([]);
+      setOnlineResults([]);
+      setSearched(false);
+      setOnlineTotal(0);
+      setOnlineOffset(0);
+      return;
+    }
+    setSearched(true);
+    const ql = val.toLowerCase();
+    setLocalResults(ALL_SONGS.filter(s =>
+      s.title.toLowerCase().includes(ql) ||
+      s.artist.toLowerCase().includes(ql) ||
+      (s.album || '').toLowerCase().includes(ql)
+    ));
+  };
+
+  // Enter → hit the API
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && query.trim().length >= 2) {
+      doOnlineSearch(query.trim());
+    }
   };
 
   const allResults = [
@@ -242,9 +247,10 @@ export default function Search() {
         <input
           type="text"
           className="search-input-big"
-          placeholder="What do you want to play?"
+          placeholder="Ketik lagu / artis, tekan Enter untuk cari..."
           value={query}
           onChange={handleInput}
+          onKeyDown={handleKeyDown}
           autoFocus
         />
         {query && (
@@ -257,6 +263,7 @@ export default function Search() {
               setSearched(false);
               setOnlineTotal(0);
               setOnlineOffset(0);
+              currentQuery.current = '';
             }}
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">

@@ -60,19 +60,20 @@ class MainActivity : AppCompatActivity() {
             serviceBound = true
             Log.d(TAG, "AudioService connected")
 
-            // Wire up callbacks
             audioService?.onTrackEnded = {
-                audioBridge?.notifyTrackEnded()
+                try { audioBridge?.notifyTrackEnded() } catch (_: Exception) {}
             }
             audioService?.onPlayStateChanged = { isPlaying ->
-                audioBridge?.notifyPlayStateChanged(isPlaying)
-                if (isPlaying) startPositionUpdates() else stopPositionUpdates()
+                try {
+                    audioBridge?.notifyPlayStateChanged(isPlaying)
+                    if (isPlaying) startPositionUpdates() else stopPositionUpdates()
+                } catch (_: Exception) {}
             }
             audioService?.onPreviousTrack = {
-                audioBridge?.notifyPrevTrack()
+                try { audioBridge?.notifyPrevTrack() } catch (_: Exception) {}
             }
             audioService?.onShuffleToggled = { enabled ->
-                audioBridge?.notifyShuffle(enabled)
+                try { audioBridge?.notifyShuffle(enabled) } catch (_: Exception) {}
             }
         }
 
@@ -106,13 +107,11 @@ class MainActivity : AppCompatActivity() {
         // Request notification permission (Android 13+)
         requestNotificationPermission()
 
-        // Start and bind audio service
+        // Start audio service — use startService (not startForegroundService) so Android
+        // doesn't enforce the 5-second startForeground() deadline before music plays.
+        // Media3's MediaSessionService promotes itself to foreground automatically when playing.
         val serviceIntent = Intent(this, AudioPlaybackService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
+        startService(serviceIntent)
         bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
 
         if (WEB_URL.isBlank()) {
@@ -448,12 +447,13 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         webView.onPause()
-        // Music keeps playing via AudioPlaybackService
+        webView.pauseTimers()   // reduce CPU/battery when in background
     }
 
     override fun onResume() {
         super.onResume()
         webView.onResume()
+        webView.resumeTimers()
         if (audioService?.isPlaying() == true) {
             startPositionUpdates()
         }
