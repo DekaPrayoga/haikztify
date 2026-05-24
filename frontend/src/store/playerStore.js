@@ -23,7 +23,8 @@ const usePlayerStore = create((set, get) => ({
   progress: 0,
   duration: 0,
   currentTime: 0,
-  spotifyReady: false, // SDK connected + Premium
+  // SDK disabled by default — SoundCloud is primary so multiple devices don't interrupt each other
+  spotifyReady: false,
   likedIds: typeof window !== 'undefined' ? new Set(JSON.parse(localStorage.getItem('likedIds') || '[]')) : new Set(),
   playlists: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('playlists') || '[]') : [],
 
@@ -164,6 +165,22 @@ const usePlayerStore = create((set, get) => ({
     if (typeof window !== 'undefined' && window.__setTrackMeta) {
       window.__setTrackMeta(track.title, track.artist, resolved.cover || track.cover || '');
     }
+
+    // Update browser media notification
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.title || 'Unknown',
+        artist: track.artist || '',
+        artwork: resolved.cover || track.cover
+          ? [{ src: resolved.cover || track.cover, sizes: '512x512', type: 'image/jpeg' }]
+          : [],
+      });
+      navigator.mediaSession.setActionHandler('play', () => usePlayerStore.getState().togglePlay());
+      navigator.mediaSession.setActionHandler('pause', () => usePlayerStore.getState().togglePlay());
+      navigator.mediaSession.setActionHandler('nexttrack', () => usePlayerStore.getState().playNext());
+      navigator.mediaSession.setActionHandler('previoustrack', () => usePlayerStore.getState().playPrev());
+    }
+
     audio.src = resolved.src;
     audio.volume = state.isMuted ? 0 : state.volume;
     audio.play().catch((e) => console.warn('audio.play failed:', e));
@@ -276,7 +293,18 @@ const usePlayerStore = create((set, get) => ({
 }));
 
 if (audio) {
-  audio.addEventListener('timeupdate', () => usePlayerStore.getState()._updateTime());
+  audio.addEventListener('timeupdate', () => {
+    usePlayerStore.getState()._updateTime();
+    // Update mediaSession position for browser media notification
+    if ('mediaSession' in navigator && navigator.mediaSession.setPositionState) {
+      const { duration, currentTime } = usePlayerStore.getState();
+      if (duration > 0) {
+        try {
+          navigator.mediaSession.setPositionState({ duration, position: currentTime, playbackRate: 1 });
+        } catch (_) {}
+      }
+    }
+  });
   audio.addEventListener('ended', () => {
     const { repeat } = usePlayerStore.getState();
     if (repeat === 2) { audio.currentTime = 0; audio.play(); return; }
@@ -286,7 +314,6 @@ if (audio) {
     const store = usePlayerStore.getState();
     const track = store.currentTrack;
     if (!track) return;
-    // First error: URL likely expired — clear cache and re-resolve once
     if (!track._retried) {
       clearResolvedCache(track.id);
       const fresh = await resolveTrackAudio({ ...track, src: null }).catch(() => null);
