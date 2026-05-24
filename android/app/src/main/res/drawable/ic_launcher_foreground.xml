@@ -2,25 +2,25 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- WiFi dot -->
+
+    <!-- Equalizer bar 1 (short) -->
     <path android:fillColor="#1DB954"
-        android:pathData="M54,44 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"/>
-    <!-- WiFi arc small -->
-    <path android:fillColor="#00000000" android:strokeColor="#1DB954" android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:pathData="M44,40 Q54,30 64,40"/>
-    <!-- WiFi arc medium -->
-    <path android:fillColor="#00000000" android:strokeColor="#1DB954" android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:pathData="M37,33 Q54,20 71,33"/>
-    <!-- WiFi arc large -->
-    <path android:fillColor="#00000000" android:strokeColor="#1DB954" android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:pathData="M29,26 Q54,10 79,26"/>
-    <!-- H left bar -->
-    <path android:fillColor="#1DB954" android:pathData="M28,52 L28,92 L40,92 L40,52 Z"/>
-    <!-- H right bar -->
-    <path android:fillColor="#1DB954" android:pathData="M68,52 L68,92 L80,92 L80,52 Z"/>
-    <!-- H crossbar -->
-    <path android:fillColor="#1DB954" android:pathData="M40,66 L68,66 L68,78 L40,78 Z"/>
+        android:pathData="M22,72 L22,82 Q22,84 24,84 L30,84 Q32,84 32,82 L32,72 Q32,70 30,70 L24,70 Q22,70 22,72 Z"/>
+
+    <!-- Equalizer bar 2 (tall) -->
+    <path android:fillColor="#1DB954"
+        android:pathData="M36,44 L36,82 Q36,84 38,84 L44,84 Q46,84 46,82 L46,44 Q46,42 44,42 L38,42 Q36,42 36,44 Z"/>
+
+    <!-- Equalizer bar 3 (medium-tall) -->
+    <path android:fillColor="#1DB954"
+        android:pathData="M50,54 L50,82 Q50,84 52,84 L58,84 Q60,84 60,82 L60,54 Q60,52 58,52 L52,52 Q50,52 50,54 Z"/>
+
+    <!-- Equalizer bar 4 (medium) -->
+    <path android:fillColor="#1DB954"
+        android:pathData="M64,62 L64,82 Q64,84 66,84 L72,84 Q74,84 74,82 L74,62 Q74,60 72,60 L66,60 Q64,60 64,62 Z"/>
+
+    <!-- Equalizer bar 5 (short-medium) -->
+    <path android:fillColor="#1DB954"
+        android:pathData="M78,68 L78,82 Q78,84 80,84 L86,84 Q88,84 88,82 L88,68 Q88,66 86,66 L80,66 Q78,66 78,68 Z"/>
+
 </vector>

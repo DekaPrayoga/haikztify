@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import usePlayerStore from '../store/playerStore';
 
 export default function Player() {
@@ -12,23 +12,66 @@ export default function Player() {
 
   const progressRef = useRef(null);
   const volumeRef = useRef(null);
+  const isDraggingProgress = useRef(false);
+  const isDraggingVolume = useRef(false);
 
   const fmt = (s) => {
     if (!s || !isFinite(s)) return '0:00';
     return `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
   };
 
-  const handleProgressClick = useCallback((e) => {
-    if (!progressRef.current) return;
-    const rect = progressRef.current.getBoundingClientRect();
-    seekTo(((e.clientX - rect.left) / rect.width) * 100);
+  const getPct = (e, ref) => {
+    const rect = ref.current.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    return Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+  };
+
+  // Progress drag
+  const handleProgressMouseDown = useCallback((e) => {
+    isDraggingProgress.current = true;
+    seekTo(getPct(e, progressRef));
   }, [seekTo]);
 
-  const handleVolumeClick = useCallback((e) => {
-    if (!volumeRef.current) return;
-    const rect = volumeRef.current.getBoundingClientRect();
-    setVolume((e.clientX - rect.left) / rect.width);
+  const handleProgressTouchStart = useCallback((e) => {
+    isDraggingProgress.current = true;
+    seekTo(getPct(e, progressRef));
+  }, [seekTo]);
+
+  // Volume drag
+  const handleVolumeMouseDown = useCallback((e) => {
+    isDraggingVolume.current = true;
+    setVolume(getPct(e, volumeRef) / 100);
   }, [setVolume]);
+
+  const handleVolumeTouchStart = useCallback((e) => {
+    isDraggingVolume.current = true;
+    setVolume(getPct(e, volumeRef) / 100);
+  }, [setVolume]);
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (isDraggingProgress.current && progressRef.current) {
+        seekTo(getPct(e, progressRef));
+      }
+      if (isDraggingVolume.current && volumeRef.current) {
+        setVolume(getPct(e, volumeRef) / 100);
+      }
+    };
+    const onUp = () => {
+      isDraggingProgress.current = false;
+      isDraggingVolume.current = false;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+  }, [seekTo, setVolume]);
 
   const isLiked = currentTrack ? likedIds.has(currentTrack.id) : false;
   const vol = isMuted ? 0 : volume;
@@ -80,7 +123,13 @@ export default function Player() {
         </div>
         <div className="progress-container">
           <span className="progress-time">{fmt(currentTime)}</span>
-          <div className="progress-track" ref={progressRef} onClick={handleProgressClick}>
+          <div
+            className="progress-track"
+            ref={progressRef}
+            onMouseDown={handleProgressMouseDown}
+            onTouchStart={handleProgressTouchStart}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="progress-fill" style={{ width: `${progress}%` }} />
             <div className="progress-thumb" style={{ left: `${progress}%` }} />
           </div>
@@ -97,7 +146,13 @@ export default function Player() {
           )}
         </button>
         <div className="volume-wrap">
-          <div className="volume-track" ref={volumeRef} onClick={handleVolumeClick}>
+          <div
+            className="volume-track"
+            ref={volumeRef}
+            onMouseDown={handleVolumeMouseDown}
+            onTouchStart={handleVolumeTouchStart}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="volume-fill" style={{ width: `${vol * 100}%` }} />
             <div className="volume-thumb" style={{ left: `${vol * 100}%` }} />
           </div>

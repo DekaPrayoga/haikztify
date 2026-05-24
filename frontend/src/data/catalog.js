@@ -674,7 +674,7 @@ export async function resolveTrackAudio(track) {
     if (best.src) {
       const resolved = {
         ...track,
-        id: best.id,
+        // Keep original track.id so findIndex in playerStore still works correctly
         src: `${API_BASE}/api/proxy?url=${encodeURIComponent(best.src)}`,
         duration: best.duration,
         cover: track.cover || best.cover,

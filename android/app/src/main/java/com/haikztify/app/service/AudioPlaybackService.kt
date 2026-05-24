@@ -55,6 +55,7 @@ class AudioPlaybackService : MediaSessionService() {
             super.getAvailableCommands().buildUpon()
                 .add(Player.COMMAND_SEEK_TO_NEXT)
                 .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                .add(Player.COMMAND_SET_SHUFFLE_MODE)
                 .build()
 
         // Media3's DefaultMediaNotificationProvider calls isCommandAvailable(),
@@ -62,6 +63,7 @@ class AudioPlaybackService : MediaSessionService() {
         override fun isCommandAvailable(command: Int): Boolean =
             command == Player.COMMAND_SEEK_TO_NEXT ||
             command == Player.COMMAND_SEEK_TO_PREVIOUS ||
+            command == Player.COMMAND_SET_SHUFFLE_MODE ||
             super.isCommandAvailable(command)
 
         override fun seekToNext() {
