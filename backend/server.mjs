@@ -426,6 +426,7 @@ const SCOPES = [
   'user-read-private','user-read-email',
   'user-top-read','user-read-recently-played',
   'user-library-read','playlist-read-private','playlist-read-collaborative',
+  'streaming','user-modify-playback-state','user-read-playback-state',
 ].join(' ');
 
 function genState() {

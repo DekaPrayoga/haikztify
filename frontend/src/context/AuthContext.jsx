@@ -117,6 +117,12 @@ export function AuthProvider({ children }) {
 
   const isLoggedIn = !!user && !!accessToken;
 
+  // Expose getToken globally so playerStore (non-React) can call it
+  useEffect(() => {
+    window.__getSpotifyToken = getToken;
+    return () => { window.__getSpotifyToken = null; };
+  }, [getToken]);
+
   return (
     <AuthContext.Provider value={{ user, accessToken, isLoggedIn, loading, getToken, handleCallback, logout, saveTokens }}>
       {children}

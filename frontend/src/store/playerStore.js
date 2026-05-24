@@ -3,8 +3,11 @@ import { ALL_SONGS, resolveTrackAudio, prefetchTrackAudio, clearResolvedCache } 
 
 const audio = typeof window !== 'undefined' ? new Audio() : null;
 
-// Monotonically increasing counter — stale resolves bail out when ID changes
 let playRequestId = 0;
+
+// Spotify SDK state (set by useSpotifySDK hook)
+let sdkPlayer = null;
+let sdkDeviceId = null;
 
 const usePlayerStore = create((set, get) => ({
   queue: [...ALL_SONGS],
@@ -20,8 +23,37 @@ const usePlayerStore = create((set, get) => ({
   progress: 0,
   duration: 0,
   currentTime: 0,
+  spotifyReady: false, // SDK connected + Premium
   likedIds: typeof window !== 'undefined' ? new Set(JSON.parse(localStorage.getItem('likedIds') || '[]')) : new Set(),
   playlists: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('playlists') || '[]') : [],
+
+  setSpotifyReady: (ready, deviceId, player) => {
+    sdkPlayer = player;
+    sdkDeviceId = deviceId;
+    set({ spotifyReady: ready });
+  },
+
+  // Called by SDK player_state_changed
+  _syncSpotifyState: (state) => {
+    if (!state) return;
+    const track = state.track_window?.current_track;
+    const dur = state.duration / 1000;
+    const cur = state.position / 1000;
+    set({
+      isPlaying: !state.paused,
+      duration: dur,
+      currentTime: cur,
+      progress: dur ? (cur / dur) * 100 : 0,
+      ...(track ? {
+        currentTrack: {
+          ...get().currentTrack,
+          title: track.name,
+          artist: track.artists.map(a => a.name).join(', '),
+          cover: track.album.images[0]?.url || get().currentTrack?.cover,
+        }
+      } : {}),
+    });
+  },
 
   createPlaylist: (name) => {
     const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -82,18 +114,44 @@ const usePlayerStore = create((set, get) => ({
     const state = get();
     const q = newQueue || state.queue;
     const idx = q.findIndex(s => s.id === track.id);
-    if (!audio) return;
 
-    // BUG FIX #1: race condition — increment ID so any stale resolve aborts
     const myRequestId = ++playRequestId;
-
     set({ currentTrack: track, currentIndex: idx >= 0 ? idx : 0, queue: q, isLoading: true, progress: 0, currentTime: 0, duration: 0 });
 
+    // Use Spotify SDK if ready (Premium user logged in)
+    if (state.spotifyReady && sdkDeviceId && track.spotifyId) {
+      try {
+        const { getToken } = await import('../context/AuthContext').then(m => {
+          // getToken is not directly importable — use window helper set by AuthProvider
+          return { getToken: window.__getSpotifyToken };
+        });
+        const token = getToken ? await getToken() : null;
+        if (token) {
+          await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${sdkDeviceId}`, {
+            method: 'PUT',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uris: [`spotify:track:${track.spotifyId}`] }),
+          });
+          if (playRequestId !== myRequestId) return;
+          if (typeof window !== 'undefined' && window.__setTrackMeta) {
+            window.__setTrackMeta(track.title, track.artist, track.cover || '');
+          }
+          set({ currentTrack: track, isPlaying: true, isLoading: false });
+          const nextIdx = (idx >= 0 ? idx : 0) + 1;
+          if (nextIdx < q.length) prefetchTrackAudio(q[nextIdx]);
+          return;
+        }
+      } catch (e) {
+        console.warn('SDK playback failed, falling back to SoundCloud:', e);
+      }
+    }
+
+    // Fallback: SoundCloud / proxy
+    if (!audio) return;
     let resolved = track;
-    // Skip resolve only for localhost/proxy — yt-stream URLs expire, always re-resolve them
     if (!track.src || (!track.src.includes('localhost') && !track.src.includes('/api/proxy') && !track.src.includes(':3001'))) {
       resolved = await resolveTrackAudio(track);
-      if (playRequestId !== myRequestId) return; // stale — user clicked another track
+      if (playRequestId !== myRequestId) return;
       if (!resolved.src) {
         set({ currentTrack: { ...track, cover: resolved.cover || track.cover }, isLoading: false, isPlaying: false });
         return;
@@ -123,7 +181,14 @@ const usePlayerStore = create((set, get) => ({
   setQueue: (songs) => set({ queue: songs, originalQueue: songs }),
 
   togglePlay: () => {
-    const { isPlaying, currentIndex } = get();
+    const { isPlaying, currentIndex, spotifyReady } = get();
+
+    // SDK mode
+    if (spotifyReady && sdkPlayer) {
+      sdkPlayer.togglePlay().catch(() => {});
+      return;
+    }
+
     if (!audio) return;
     if (currentIndex === -1) { get().playIndex(0); return; }
     if (isPlaying) { audio.pause(); set({ isPlaying: false }); }
@@ -169,16 +234,24 @@ const usePlayerStore = create((set, get) => ({
   setVolume: (v) => {
     const vol = Math.max(0, Math.min(1, v));
     if (audio) audio.volume = vol;
+    if (sdkPlayer) sdkPlayer.setVolume(vol).catch(() => {});
     set({ volume: vol, isMuted: false });
   },
 
   toggleMute: () => {
     const { isMuted, volume } = get();
     if (audio) audio.volume = isMuted ? volume : 0;
+    if (sdkPlayer) sdkPlayer.setVolume(isMuted ? volume : 0).catch(() => {});
     set({ isMuted: !isMuted });
   },
 
   seekTo: (pct) => {
+    // SDK mode
+    if (get().spotifyReady && sdkPlayer) {
+      const dur = get().duration;
+      if (dur) sdkPlayer.seek((pct / 100) * dur * 1000).catch(() => {});
+      return;
+    }
     if (!audio) return;
     if (!audio.duration || !isFinite(audio.duration)) {
       const onReady = () => {

@@ -15,6 +15,7 @@ import AIChat from './components/AIChat';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useEffect } from 'react';
 import usePlayerStore from './store/playerStore';
+import useSpotifySDK from './hooks/useSpotifySDK';
 
 function KeyboardShortcuts() {
   const { togglePlay } = usePlayerStore();
@@ -67,6 +68,7 @@ function MobileNav() {
 
 // Main layout (with sidebar + player)
 function AppLayout() {
+  useSpotifySDK(); // init Spotify Web Playback SDK if user is logged in Premium
   return (
     <div className="app-layout">
       <Sidebar />
