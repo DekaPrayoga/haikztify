@@ -312,44 +312,60 @@ Object.entries(MUSIC_CATALOG).forEach(([genre, songs]) => {
   });
 });
 
+// In-memory cache so resolved URLs are reused without re-fetching
+const resolvedCache = new Map();
+
+export function prefetchTrackAudio(track) {
+  if (!track || resolvedCache.has(track.id)) return;
+  resolveTrackAudio(track).catch(() => {});
+}
+
 export async function resolveTrackAudio(track) {
   if (track.src && (track.src.includes('localhost') || track.src.includes('/api/proxy') || track.src.includes('/api/yt-stream') || track.src.includes(':3001'))) return track;
+
+  const cached = resolvedCache.get(track.id);
+  if (cached) return { ...track, ...cached };
+
   const q = `${track.title} ${track.artist}`;
-  try {
-    const res = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(q)}`);
-    const data = await res.json();
-    const tracks = data.tracks || [];
-    if (tracks.length > 0) {
-      const withPreview = tracks.find(r => r.src);
-      const best = withPreview || tracks[0];
-      if (best.src) {
-        return {
-          ...track,
-          id: best.id,
-          src: `${API_BASE}/api/proxy?url=${encodeURIComponent(best.src)}`,
-          duration: best.duration,
-          cover: track.cover || best.cover,
-        };
-      }
+
+  // Fire both requests in parallel — Spotify is faster, yt-dlp is the fallback.
+  // If Spotify returns a preview URL we use it immediately without waiting for yt-dlp.
+  // If not, yt-dlp is already running so we only wait for its remaining time.
+  const spotifyFetch = fetch(`${API_BASE}/api/search?q=${encodeURIComponent(q)}`)
+    .then(r => r.json())
+    .catch(() => null);
+  const ytFetch = fetch(`${API_BASE}/api/yt-audio?q=${encodeURIComponent(q)}`)
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null);
+
+  const spotifyData = await spotifyFetch;
+  if (spotifyData?.tracks?.length > 0) {
+    const withPreview = spotifyData.tracks.find(r => r.src);
+    const best = withPreview || spotifyData.tracks[0];
+    if (best.src) {
+      const resolved = {
+        ...track,
+        id: best.id,
+        src: `${API_BASE}/api/proxy?url=${encodeURIComponent(best.src)}`,
+        duration: best.duration,
+        cover: track.cover || best.cover,
+      };
+      resolvedCache.set(track.id, { src: resolved.src, duration: resolved.duration, cover: resolved.cover });
+      return resolved;
     }
-  } catch (e) {
-    console.error('Spotify search failed:', e);
   }
-  // Always try yt-dlp regardless of Spotify result (works even when Spotify rate-limits)
-  try {
-    const ytRes = await fetch(`${API_BASE}/api/yt-audio?q=${encodeURIComponent(q)}`);
-    if (ytRes.ok) {
-      const ytData = await ytRes.json();
-      if (ytData.url) {
-        return {
-          ...track,
-          src: `${API_BASE}/api/yt-stream?url=${encodeURIComponent(ytData.url)}`,
-        };
-      }
-    }
-  } catch (ytErr) {
-    console.error('yt-dlp failed:', ytErr);
+
+  // Spotify had no preview — yt-dlp fetch is already in-flight, just await it
+  const ytData = await ytFetch;
+  if (ytData?.url) {
+    const resolved = {
+      ...track,
+      src: `${API_BASE}/api/yt-stream?url=${encodeURIComponent(ytData.url)}`,
+    };
+    resolvedCache.set(track.id, { src: resolved.src, duration: resolved.duration, cover: resolved.cover });
+    return resolved;
   }
+
   return { ...track, src: null };
 }
 

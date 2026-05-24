@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ALL_SONGS, resolveTrackAudio } from '../data/catalog';
+import { ALL_SONGS, resolveTrackAudio, prefetchTrackAudio } from '../data/catalog';
 
 const audio = typeof window !== 'undefined' ? new Audio() : null;
 
@@ -101,6 +101,11 @@ const usePlayerStore = create((set, get) => ({
     audio.volume = state.isMuted ? 0 : state.volume;
     audio.play().catch(() => {});
     set({ currentTrack: { ...track, src: resolved.src, duration: resolved.duration, cover: resolved.cover || track.cover }, isPlaying: true, isLoading: false });
+
+    // Prefetch next track in background so it's ready instantly
+    const q = get().queue;
+    const nextIdx = (idx >= 0 ? idx : 0) + 1;
+    if (nextIdx < q.length) prefetchTrackAudio(q[nextIdx]);
   },
 
   playIndex: async (index) => {
